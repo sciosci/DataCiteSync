@@ -21,9 +21,10 @@ dag = DAG(
     start_date=datetime(2024, 1, 1),  # Adjust start date to your needs
     catchup=False,
 )
-suffix = (datetime.now()).strftime("%Y%m%d%H%M")
+suffix = (datetime.now()).strftime("%Y%m%d%")
 path = f"/home/ubuntu/mypetalibrary/pmoa-cite-dataset/open_alex_metadata/openalex-snapshot-{suffix}"
-bash_command = f'aws s3 sync "s3://openalex" "{path}" --no-sign-request'
+bash_command = f'mkdir {path};' \
+               f'aws s3 sync "s3://openalex" "{path}" --no-sign-request;'
 # Define the task to sync the S3 bucket
 sync_s3_bucket = BashOperator(
     task_id='sync_openalex_s3',
