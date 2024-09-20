@@ -7,12 +7,11 @@ from config import api_key
 from tqdm import tqdm
 
 
-def create_s3_directories(release_date_path, files, date, headers):
+def process_gzip_files(release_date_path, files, date, headers):
     for i, file_url in enumerate(files):
         # Create a subdirectory named after the zip file
         file_dir = release_date_path / f"zip_file_{i}_for_{date}"
         file_dir.mkdir(parents=True, exist_ok=True)
-
 
         # Extract research objects belonging to the zip file and save them in file_dir
         extract_research_objects(file_url, headers=headers, output_dir=file_dir)
@@ -37,8 +36,8 @@ def extract_research_objects(gz_url, headers, output_dir):
             with io.TextIOWrapper(gz, encoding='utf-8') as reader:
                 for i, line in enumerate(tqdm(reader, desc="Reading lines")):
                     # BREAK IS ONLY FOR LOCAL TESTING
-                    #if i >= 100: 
-                     #   break
+                    if i >= 100: 
+                       break
                     if line.strip():
                         try:
                             obj = json.loads(line)
@@ -52,6 +51,13 @@ def extract_research_objects(gz_url, headers, output_dir):
 
 
 def main():
+    """
+    DIEGO TASKS, TO-DO:
+        - instead of outputting thousands of files per zip, we should make each output object into a pandas or 
+        pickle dataframe, so the code will run faster as well as easy usability.
+    """
+
+
     headers = {'x-api-key': api_key}
     base_url = 'https://api.semanticscholar.org/datasets/v1/release/'
 
@@ -69,20 +75,21 @@ def main():
         dataset_response = requests.get(url, headers=headers)
         dataset_info = dataset_response.json()
         files = dataset_info.get('files', [])
+        
         if not files:
             print(f"No files found for {date}")
-            no_files_found.append(dataset_info)
+            # no_files_found.append(dataset_info)
             pass 
         release_date_dir = date
         release_date_path = base_path / release_date_dir
         release_date_path.mkdir(parents=True, exist_ok=True)
         # 
         # Create a new directory for every zip object
-        create_s3_directories(release_date_path, files=files, date=date, headers=headers)
+        process_gzip_files(release_date_path, files=files, date=date, headers=headers)
 
     # Local tracker for rate limit hitting    
-    for file in no_files_found:
-        print(f"\n No files found for {file} ")
+    # for file in no_files_found:
+    #     print(f"\n No files found for {file} ")
 
 
 if __name__ == '__main__':
