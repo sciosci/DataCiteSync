@@ -5,9 +5,18 @@ import io
 from pathlib import Path
 from config import api_key
 from tqdm import tqdm
-
+import pandas as pd
 
 def process_gzip_files(release_date_path, files, date, headers):
+    """
+    Creates a folder for each zip file stored under the SS bulk data api dates.
+
+    Parameters: 
+    - release_date_path:
+    - files:
+    - date:
+    - headers:
+    """
     for i, file_url in enumerate(files):
         # Create a subdirectory named after the zip file
         file_dir = release_date_path / f"zip_file_{i}_for_{date}"
@@ -18,50 +27,51 @@ def process_gzip_files(release_date_path, files, date, headers):
 
 def extract_research_objects(gz_url, headers, output_dir):
     """
-    decompresses .gz file,
-    and writes each JSON object to a separate file in output_dir.
+    Decompresses .gz file and writes all JSON objects to a pandas DataFrame,
+    saving it as a pickle file in output_dir.
 
     Parameters:
     - gz_url (str): The pre-signed URL to the .gz file (S3 BUCKET).
     - headers (dict): Headers for the HTTP request.
-    - output_dir (Path): The directory where JSON files will be saved.
+    - output_dir (Path): The directory where the DataFrame will be saved.
 
     Returns:
     - None
     """
+    data_list = []
+    output_file = output_dir / 'data.pkl'
+
     with requests.get(gz_url, headers=headers, stream=True) as response:
         response.raise_for_status()  # Raise an exception for HTTP errors
         response.raw.decode_content = True  # Ensure content is decoded
         with gzip.GzipFile(fileobj=response.raw) as gz:
             with io.TextIOWrapper(gz, encoding='utf-8') as reader:
                 for i, line in enumerate(tqdm(reader, desc="Reading lines")):
-                    # BREAK IS ONLY FOR LOCAL TESTING
-                    if i >= 100: 
-                       break
+                    # Uncomment the following line for local testing
+                    # if i >= 100: break
                     if line.strip():
                         try:
                             obj = json.loads(line)
-                            # Save obj to a JSON file
-                            obj_filename = output_dir / f"object_{i+1}.json"
-                            with obj_filename.open('w', encoding='utf-8') as f:
-                                json.dump(obj, f, ensure_ascii=False, indent=2)
+                            data_list.append(obj)
                         except json.JSONDecodeError as e:
                             print(f"JSON decode error on line {i+1}: {e}")
                             continue
 
+    # Convert the entire list to a DataFrame
+    df = pd.DataFrame(data_list)
+    # Save the DataFrame as a pickle file
+    df.to_pickle(output_file)
 
 def main():
     """
-    DIEGO TASKS, TO-DO:
-        - instead of outputting thousands of files per zip, we should make each output object into a pandas or 
-        pickle dataframe, so the code will run faster as well as easy usability.
+    
     """
 
 
     headers = {'x-api-key': api_key}
     base_url = 'https://api.semanticscholar.org/datasets/v1/release/'
 
-    base_path = Path(r'')
+    base_path = Path(r'C:\Users\diego\OneDrive\Desktop\Desktop\Software\Research\DataCiteSync\sync_and_process_scripts\semantic_scholar\SS_Output')
 
     # Step 1: Fetch all release dates
     release_dates_response = requests.get(base_url, headers=headers)
@@ -90,7 +100,6 @@ def main():
     # Local tracker for rate limit hitting    
     # for file in no_files_found:
     #     print(f"\n No files found for {file} ")
-
 
 if __name__ == '__main__':
     main()
