@@ -5,68 +5,57 @@ import io
 from pathlib import Path
 from config import api_key
 from tqdm import tqdm
-from urllib.parse import urlparse
-import sys
-import argparse
-import re
 
-def create_s3_directories(release_date_path, files, date):
+
+def create_s3_directories(release_date_path, files, date, headers):
     for i, file_url in enumerate(files):
-        # Extract the filename from the URL
-
-        # Create a subdirectory named after the cleaned filename
-        file_dir = release_date_path / f"zip_file_{i}_for_{date}" 
+        # Create a subdirectory named after the zip file
+        file_dir = release_date_path / f"zip_file_{i}_for_{date}"
         file_dir.mkdir(parents=True, exist_ok=True)
 
-        # Add research objects belonging to zip file
-        
 
-        # Future method: fill in each directory
-        # fileObjects = extract_research_objects(file_url, headers=headers)
-        # for idx, obj in enumerate(fileObjects, 1):
-        #     print(f"\nObject {idx}:")
-        #     print(json.dumps(obj, indent=2))
+        # Extract research objects belonging to the zip file and save them in file_dir
+        extract_research_objects(file_url, headers=headers, output_dir=file_dir)
 
-def extract_research_objects(gz_url, headers):
+def extract_research_objects(gz_url, headers, output_dir):
     """
-    Streams a .gz file from a URL, decompresses it on the fly,
-    and reads the content.
+    decompresses .gz file,
+    and writes each JSON object to a separate file in output_dir.
 
     Parameters:
-    - gz_url (str): The pre-signed URL to the .gz file.
+    - gz_url (str): The pre-signed URL to the .gz file (S3 BUCKET).
+    - headers (dict): Headers for the HTTP request.
+    - output_dir (Path): The directory where JSON files will be saved.
 
     Returns:
-    - list: A list of JSON objects (as dictionaries).
+    - None
     """
     with requests.get(gz_url, headers=headers, stream=True) as response:
         response.raise_for_status()  # Raise an exception for HTTP errors
         response.raw.decode_content = True  # Ensure content is decoded
         with gzip.GzipFile(fileobj=response.raw) as gz:
             with io.TextIOWrapper(gz, encoding='utf-8') as reader:
-                objects = []
                 for i, line in enumerate(tqdm(reader, desc="Reading lines")):
-                    if i >= 100:
-                        break
+                    # BREAK IS ONLY FOR LOCAL TESTING
+                    #if i >= 100: 
+                     #   break
                     if line.strip():
                         try:
                             obj = json.loads(line)
-                            objects.append(obj)
+                            # Save obj to a JSON file
+                            obj_filename = output_dir / f"object_{i+1}.json"
+                            with obj_filename.open('w', encoding='utf-8') as f:
+                                json.dump(obj, f, ensure_ascii=False, indent=2)
                         except json.JSONDecodeError as e:
                             print(f"JSON decode error on line {i+1}: {e}")
                             continue
-                return objects
+
 
 def main():
     headers = {'x-api-key': api_key}
     base_url = 'https://api.semanticscholar.org/datasets/v1/release/'
 
-    # Parse command-line arguments
-    # parser = argparse.ArgumentParser(description='Process Semantic Scholar datasets.')
-    # parser.add_argument('--base-path', type=str, default='.',
-    #                     help='Base path where directories will be created.')
-    # args = parser.parse_args()
-
-    base_path = Path(r'C:\Users\diego\OneDrive\Desktop\Desktop\Software\Research\DataCiteSync\sync_and_process_scripts\semantic_scholar\SS_output')
+    base_path = Path(r'')
 
     # Step 1: Fetch all release dates
     release_dates_response = requests.get(base_url, headers=headers)
@@ -87,35 +76,14 @@ def main():
         release_date_dir = date
         release_date_path = base_path / release_date_dir
         release_date_path.mkdir(parents=True, exist_ok=True)
+        # 
+        # Create a new directory for every zip object
+        create_s3_directories(release_date_path, files=files, date=date, headers=headers)
 
-        # create directory for every zip object
-        create_s3_directories(release_date_path, files=files, date=date)
-    
+    # Local tracker for rate limit hitting    
     for file in no_files_found:
         print(f"\n No files found for {file} ")
 
-
-
-
-    # dataset_url = f"{base_url}{release_dates[0]}/dataset/papers"
-    # print(f"\nFetching dataset details from {dataset_url}...")
-    # dataset_response = requests.get(dataset_url, headers=headers)
-    # dataset_response.raise_for_status()
-    # dataset_info = dataset_response.json()
-
-    # # Step 3: Get the list of .gz file URLs from the 'files' list
-    # files = dataset_info.get('files', [])
-    # if not files:
-    #     print("No files found in the dataset.")
-    #     return
-
-    # # Create the release date directory under the base path
-    # release_date_dir = release_dates[0]
-    # release_date_path = base_path / release_date_dir
-    # release_date_path.mkdir(parents=True, exist_ok=True)
-
-    # # Create directories for each file
-    # create_s3_directories(release_date_path, files=files)
 
 if __name__ == '__main__':
     main()
