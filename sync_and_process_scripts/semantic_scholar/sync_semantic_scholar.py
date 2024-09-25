@@ -52,6 +52,7 @@ def extract_research_objects(gz_url, headers, output_dir):
                     if line.strip():
                         try:
                             obj = json.loads(line)
+                            # print(obj)
                             data_list.append(obj)
                         except json.JSONDecodeError as e:
                             print(f"JSON decode error on line {i+1}: {e}")
@@ -59,6 +60,7 @@ def extract_research_objects(gz_url, headers, output_dir):
 
     # Convert the entire list to a DataFrame
     df = pd.DataFrame(data_list)
+    # get_additional_citation_data(df=df)
     # Save the DataFrame as a pickle file
     df.to_pickle(output_file)
 
@@ -66,12 +68,10 @@ def main():
     """
     
     """
-
-
-    headers = {'x-api-key': api_key}
+    headers = {'x-api-key': 'FcuPcoxxWC3ePxBABTLvkyWxqvt7v9h32sDBO4ug'}
     base_url = 'https://api.semanticscholar.org/datasets/v1/release/'
 
-    base_path = Path(r'C:\Users\diego\OneDrive\Desktop\Desktop\Software\Research\DataCiteSync\sync_and_process_scripts\semantic_scholar\SS_Output')
+    base_path = Path(r'')
 
     # Step 1: Fetch all release dates
     release_dates_response = requests.get(base_url, headers=headers)
@@ -80,7 +80,9 @@ def main():
 
     # Step 2: Fetch dataset details for every date
     no_files_found = []
-    for date in release_dates:
+    for i,date in enumerate(release_dates):
+        if i > 2:
+            break
         url = f"{base_url}{date}/dataset/papers"
         dataset_response = requests.get(url, headers=headers)
         dataset_info = dataset_response.json()
