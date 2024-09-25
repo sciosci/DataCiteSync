@@ -124,9 +124,9 @@ def download_datasets(release_id: str, dataset_links_list: List[DatasetLinks], o
     # For each dataset download files
     for dataset_links in dataset_links_list:
         if(dataset_links.get("code") != None):
-            logging.debug("API Key error : Dataset {dataset_name}".format(dataset_name=dataset_links["name"]))
+            logging.info("API Key error : Dataset {dataset_name}".format(dataset_name=dataset_links["name"]))
         else:
-            logging.debug("Dataset {dataset_name} was downloaded".format(dataset_name=dataset_links["name"]))
+            logging.info("Dataset {dataset_name} was downloaded".format(dataset_name=dataset_links["name"]))
             success = download_files_for_dataset(dataset_links, release_output_path, testing=testing)
             if(success == False):
                 logging.error("Failed to download dataset : {dataset_name}".format(dataset_name=dataset_links["name"]))
@@ -155,7 +155,7 @@ def main():
     output_base_path = Path(output_base_path_str)
     output_base_path.mkdir(parents=True, exist_ok=True)
 
-    log_level = logging.DEBUG
+    log_level = logging.INFO
 
     api_key = arguments.key
 
