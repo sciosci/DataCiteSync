@@ -10,6 +10,7 @@ import pickle
 from tqdm import tqdm
 from typing import List, TypedDict, Optional #
 from pathlib import Path
+from ratelimit import limits, sleep_and_retry
 
 
 # Release URL
@@ -52,12 +53,19 @@ def get_release_info(release_id: str) -> ReleaseInfo:
     return release_dict
 
 
+@sleep_and_retry
+@limits(calls=1, period=60)
 def get_links_for_dataset(release_id: str, dataset_name: str, api_key: str) -> DatasetInfo:
+    logging.info(f"Getting links for {dataset_name}")
     headers = {
         "x-api-key": api_key
     }
     target_url = DATASET_FILES_URL_TEMPLATE.format(release_id=release_id, dataset_name=dataset_name)
     response = requests.get(target_url, headers=headers)
+    if(response.status_code == 200):
+        logging.info(f"Links for {dataset_name} was successfully obtained")
+    else:
+        logging.error(f"Failed to get links for {dataset_name} : Error code ({response.status_code})")
     dataset_links_dict = response.json()
     return dataset_links_dict
 
