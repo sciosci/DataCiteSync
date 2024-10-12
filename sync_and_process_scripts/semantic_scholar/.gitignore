@@ -3,4 +3,4 @@ __pycache__
 SS_output
 testing_data
 
-./orc_citation_endpoint/creds.py
+trial_scripts/local_run_creds.py
