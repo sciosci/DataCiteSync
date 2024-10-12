@@ -1,0 +1,113 @@
+2024-10-11 09:27:35,880 INFO MainProcess Started sync process
+2024-10-11 09:55:36,497 INFO MainProcess Started sync process
+2024-10-11 09:57:29,857 INFO MainProcess Started sync process
+2024-10-11 09:58:21,168 INFO MainProcess Started sync process
+2024-10-11 10:05:11,642 INFO MainProcess Started sync process
+2024-10-11 10:07:28,807 INFO MainProcess Started sync process
+2024-10-11 10:08:01,873 INFO MainProcess Started sync process
+2024-10-11 10:09:30,186 INFO MainProcess Started sync process
+2024-10-11 10:10:38,606 INFO MainProcess Started sync process
+2024-10-11 10:34:09,171 INFO MainProcess Started sync process
+2024-10-11 11:49:04,048 INFO MainProcess Started sync process
+2024-10-11 11:49:06,646 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 11:49:06,672 INFO MainProcess Dataset authors was downloaded
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset citations
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset embeddings-specter_v1
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset embeddings-specter_v2
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset paper-ids
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset papers
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset publication-venues
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset s2orc
+2024-10-11 11:49:06,687 INFO MainProcess API Key error : Dataset tldrs
+2024-10-11 11:49:06,687 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 2.638807773590088 seconds
+2024-10-11 11:59:14,826 INFO MainProcess Started sync process
+2024-10-11 11:59:17,775 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 11:59:17,923 INFO MainProcess API Key error : Dataset authors
+2024-10-11 11:59:17,923 INFO MainProcess API Key error : Dataset citations
+2024-10-11 11:59:17,923 INFO MainProcess API Key error : Dataset embeddings-specter_v1
+2024-10-11 11:59:17,923 INFO MainProcess API Key error : Dataset embeddings-specter_v2
+2024-10-11 11:59:17,923 INFO MainProcess API Key error : Dataset paper-ids
+2024-10-11 11:59:17,923 INFO MainProcess API Key error : Dataset papers
+2024-10-11 11:59:17,923 INFO MainProcess Dataset publication-venues was downloaded
+2024-10-11 11:59:17,925 INFO MainProcess Dataset s2orc was downloaded
+2024-10-11 11:59:18,555 INFO MainProcess API Key error : Dataset tldrs
+2024-10-11 11:59:18,555 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 3.7281811237335205 seconds
+2024-10-11 12:01:45,395 INFO MainProcess Started sync process
+2024-10-11 12:01:58,681 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 12:01:58,712 INFO MainProcess API Key error : Dataset authors
+2024-10-11 12:01:58,712 INFO MainProcess API Key error : Dataset citations
+2024-10-11 12:01:58,712 INFO MainProcess API Key error : Dataset embeddings-specter_v1
+2024-10-11 12:01:58,712 INFO MainProcess API Key error : Dataset embeddings-specter_v2
+2024-10-11 12:01:58,712 INFO MainProcess API Key error : Dataset paper-ids
+2024-10-11 12:01:58,712 INFO MainProcess Dataset papers was downloaded
+2024-10-11 12:01:58,740 INFO MainProcess Dataset publication-venues was downloaded
+2024-10-11 12:01:58,741 INFO MainProcess Dataset s2orc was downloaded
+2024-10-11 12:01:58,869 INFO MainProcess Dataset tldrs was downloaded
+2024-10-11 12:01:58,883 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 13.4880530834198 seconds
+2024-10-11 12:06:38,688 INFO MainProcess Started sync process
+2024-10-11 12:06:41,208 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 12:06:41,239 INFO MainProcess Dataset authors was downloaded
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset citations
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset embeddings-specter_v1
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset embeddings-specter_v2
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset paper-ids
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset papers
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset publication-venues
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset s2orc
+2024-10-11 12:06:41,255 INFO MainProcess API Key error : Dataset tldrs
+2024-10-11 12:06:41,255 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 2.5655479431152344 seconds
+2024-10-11 12:10:58,138 INFO MainProcess Started sync process
+2024-10-11 12:11:32,130 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 12:11:32,163 INFO MainProcess Dataset authors was downloaded
+2024-10-11 12:42:33,758 INFO MainProcess Started sync process
+2024-10-11 12:42:36,205 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 13:36:09,206 INFO MainProcess Started sync process
+2024-10-11 13:36:11,508 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 13:36:11,508 INFO MainProcess Dataset authors was downloaded
+2024-10-11 13:36:11,509 INFO MainProcess API Key error : Dataset citations
+2024-10-11 13:36:11,509 INFO MainProcess API Key error : Dataset embeddings-specter_v1
+2024-10-11 13:36:11,509 INFO MainProcess API Key error : Dataset embeddings-specter_v2
+2024-10-11 13:36:11,509 INFO MainProcess API Key error : Dataset paper-ids
+2024-10-11 13:36:11,509 INFO MainProcess API Key error : Dataset papers
+2024-10-11 13:36:11,510 INFO MainProcess API Key error : Dataset publication-venues
+2024-10-11 13:36:11,510 INFO MainProcess API Key error : Dataset s2orc
+2024-10-11 13:36:11,510 INFO MainProcess API Key error : Dataset tldrs
+2024-10-11 13:36:11,510 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 2.304173231124878 seconds
+2024-10-11 13:36:43,220 INFO MainProcess Started sync process
+2024-10-11 13:36:48,025 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 13:36:48,026 INFO MainProcess Dataset authors was downloaded
+2024-10-11 13:36:48,026 INFO MainProcess Dataset citations was downloaded
+2024-10-11 13:36:48,027 INFO MainProcess Dataset embeddings-specter_v1 was downloaded
+2024-10-11 13:36:48,028 INFO MainProcess Dataset embeddings-specter_v2 was downloaded
+2024-10-11 13:36:48,028 INFO MainProcess Dataset paper-ids was downloaded
+2024-10-11 13:36:48,029 INFO MainProcess Dataset papers was downloaded
+2024-10-11 13:36:48,029 INFO MainProcess Dataset publication-venues was downloaded
+2024-10-11 13:36:48,030 INFO MainProcess Dataset s2orc was downloaded
+2024-10-11 13:36:48,030 INFO MainProcess Dataset tldrs was downloaded
+2024-10-11 13:36:48,031 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 4.81093955039978 seconds
+2024-10-11 13:37:46,464 INFO MainProcess Started sync process
+2024-10-11 13:37:49,322 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 13:37:49,323 INFO MainProcess Dataset authors was downloaded
+2024-10-11 13:37:49,324 INFO MainProcess Dataset citations was downloaded
+2024-10-11 13:37:49,324 INFO MainProcess API Key error : Dataset embeddings-specter_v1
+2024-10-11 13:37:49,324 INFO MainProcess API Key error : Dataset embeddings-specter_v2
+2024-10-11 13:37:49,324 INFO MainProcess API Key error : Dataset paper-ids
+2024-10-11 13:37:49,325 INFO MainProcess Dataset papers was downloaded
+2024-10-11 13:37:49,325 INFO MainProcess Dataset publication-venues was downloaded
+2024-10-11 13:37:49,326 INFO MainProcess API Key error : Dataset s2orc
+2024-10-11 13:37:49,326 INFO MainProcess API Key error : Dataset tldrs
+2024-10-11 13:37:49,326 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 2.8611435890197754 seconds
+2024-10-11 13:39:14,437 INFO MainProcess Started sync process
+2024-10-11 13:39:18,072 INFO MainProcess Dataset abstracts was downloaded
+2024-10-11 13:39:18,072 INFO MainProcess Dataset authors was downloaded
+2024-10-11 13:39:18,073 INFO MainProcess Dataset citations was downloaded
+2024-10-11 13:39:18,073 INFO MainProcess API Key error : Dataset embeddings-specter_v1
+2024-10-11 13:39:18,073 INFO MainProcess Dataset embeddings-specter_v2 was downloaded
+2024-10-11 13:39:18,073 INFO MainProcess Dataset paper-ids was downloaded
+2024-10-11 13:39:18,074 INFO MainProcess Dataset papers was downloaded
+2024-10-11 13:39:18,074 INFO MainProcess API Key error : Dataset publication-venues
+2024-10-11 13:39:18,074 INFO MainProcess API Key error : Dataset s2orc
+2024-10-11 13:39:18,074 INFO MainProcess Dataset tldrs was downloaded
+2024-10-11 13:39:18,074 INFO MainProcess Sync succeeded on release 2024-10-08: time elapsed 3.6366004943847656 seconds
+2024-10-11 21:11:52,097 INFO MainProcess Started sync process
+2024-10-11 21:11:56,582 INFO MainProcess Dataset abstracts was downloaded
