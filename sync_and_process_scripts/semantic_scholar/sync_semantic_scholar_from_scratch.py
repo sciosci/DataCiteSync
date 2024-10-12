@@ -123,7 +123,6 @@ def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str
                     last_downloaded_object = 0
                     continue
                 #If false, then the token timed out and we new urls.
-
                 else:
                     new_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
         else:
@@ -137,96 +136,40 @@ def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str
                     new_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
     return True
 
-def download_data_file_as_parquet(output_dir: str, output_filename: str, url: str, checkpoint: int) -> Tuple[bool, int]:
-    """
-    Downloads data from the given URL, processes it, and stores it in a Parquet file.
-    
-    Args:
-        output_dir (str): Directory to save the output Parquet file.
-        output_filename (str): The base name of the output Parquet file.
-        url (str): URL to download the data from.
-        checkpoint (int): Line number to resume from in case of errors.
-        
-    Returns:
-        (bool, int): Tuple indicating success status and the last processed line number (as checkpoint).
-    """
+
+def download_data_file_as_parquet(output_dir: str, output_filename: str, url: str) -> bool:
     records = list()
-    current_line = checkpoint  # Start from the given checkpoint
-
     try:
-        # Making the request with a timeout
-        with requests.get(url, stream=True, timeout=10) as response:
-            # Check for HTTP errors, including unauthorized access
-            if response.status_code == 401:
-                logging.error("Token expired or unauthorized request.")
-                # Save data before returning
-                if records:
-                    save_partial_data(records, output_dir, output_filename, checkpoint, current_line)
-                return False, current_line
-
-            response.raise_for_status()  # Raise exception for other types of HTTP errors
-
-            # Proceed with data extraction if the response is successful
+        with requests.get(url, stream=True) as response:
+            response.raise_for_status()
             with gzip.GzipFile(fileobj=response.raw) as gz:
                 with io.TextIOWrapper(gz, encoding="utf-8") as reader:
-                    # Skip lines up to the last processed line
-                    for _ in range(current_line):
-                        next(reader)
-
-                    # Start processing from where we left off
-                    for i, line in enumerate(tqdm(reader, desc="Reading lines", initial=current_line), start=current_line + 1):
+                    print((reader))
+                    for i, line in enumerate(tqdm(reader, desc="Reading lines")):
                         line = line.strip()
                         if line:
                             try:
                                 record_object = json.loads(line)
                                 records.append(record_object)
-
-                                # Update the checkpoint every 100 lines (or any desired frequency)
-                                if i % 100 == 0:
-                                    current_line = i
                             except json.JSONDecodeError as e:
-                                logging.error(f"JSON decode error on line {i}: {e}")
+                                logging.error(f"JSON decode error on line {i+1}: {e}")
                                 continue
                             except Exception as e:
-                                logging.error(f"Unknown Error on line {i}: {e}")
+                                logging.error(f"Unknown Error {i+1}: {e}")
                                 continue
 
-        # Save data to a uniquely named Parquet file
-        save_partial_data(records, output_dir, output_filename, checkpoint, current_line)
-
-        # If successful, return True and the final line number
-        return True, current_line
-
+        records_df = pd.DataFrame(records)
+        print('records df', records_df)
+        records_df.to_parquet(f"{output_dir}/{output_filename}.parquet", engine="pyarrow")
+        return True
     except requests.RequestException as e:
+        # Return False and the last processed line 
         logging.error(f"Request error (possible token expiration or network issue): {e}")
-        # Save data before returning
-        if records:
-            save_partial_data(records, output_dir, output_filename, checkpoint, current_line)
-        # Return False and the last processed line (current checkpoint)
-        return False, current_line
+        return False
     except Exception as e:
+        # General error handling, return 
         logging.error(f"General error: {e}")
-        # Save data before returning
-        if records:
-            save_partial_data(records, output_dir, output_filename, checkpoint, current_line)
-        # Return False and the last processed line (current checkpoint)
-        return False, current_line
-
-def save_partial_data(records: list, output_dir: str, output_filename: str, start_line: int, end_line: int):
-    """
-    Saves the collected records to a Parquet file with a unique filename.
-    
-    Args:
-        records (list): List of records to save.
-        output_dir (str): Directory to save the output Parquet file.
-        output_filename (str): The base name of the output Parquet file.
-        start_line (int): The starting line number of the data chunk.
-        end_line (int): The ending line number of the data chunk.
-    """
-    output_path = f"{output_dir}/{output_filename}_part_{start_line}_{end_line}.parquet"
-    records_df = pd.DataFrame(records)
-    records_df.to_parquet(output_path, engine="pyarrow")
-    logging.info(f"Saved partial data to {output_path}")
+        return False 
 
 def main():    
     # Parse command line arguments
