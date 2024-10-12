@@ -102,7 +102,6 @@ def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str
     per dataset, we are using a while loop to extract the data from the compressed urls.
     If a token times out on a url, we will request a new batch of urls, ensuring they are always in the same order. 
     we also keep track of the 
-
     '''
     # Prepare output dir for dataset
     output_dataset_path = "{output_base_dir}/{dataset_name}".format(output_base_dir=output_base_dir, dataset_name=dataset_links["name"])
@@ -117,21 +116,17 @@ def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str
     while link < len(dataset_links["files"]):
         if len(new_urls.keys()) == 0:
                 part_name = f"part_{link:03d}"
-                return_bool, last_downloaded_object = download_data_file_as_parquet(output_dataset_path, part_name, dataset_links["files"][link], last_downloaded_object)
-                if return_bool == True:
-                    link += 1
-                    last_downloaded_object = 0
-                    continue
+                download_success = download_data_file_as_parquet(output_dataset_path, part_name, dataset_links["files"][link], last_downloaded_object)
+                if download_success == True:
+                    link += 1       
                 #If false, then the token timed out and we new urls.
                 else:
                     new_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
         else:
                 part_name = f"part_{link:03d}"
-                return_bool, last_downloaded_object = download_data_file_as_parquet(output_dataset_path, part_name, dataset_links["files"][link], last_downloaded_object)
-                if return_bool == True:
-                    link += 1
-                    last_downloaded_object = 0
-                    continue
+                download_success = download_data_file_as_parquet(output_dataset_path, part_name, new_urls["files"][link])
+                if download_success == True:
+                    link += 1 
                 else:
                     new_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
     return True
@@ -159,7 +154,6 @@ def download_data_file_as_parquet(output_dir: str, output_filename: str, url: st
                                 continue
 
         records_df = pd.DataFrame(records)
-        print('records df', records_df)
         records_df.to_parquet(f"{output_dir}/{output_filename}.parquet", engine="pyarrow")
         return True
     except requests.RequestException as e:
