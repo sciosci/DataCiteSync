@@ -5,7 +5,7 @@ source ~/miniconda3/etc/profile.d/conda.sh
 # activate virtual environment
 conda activate data-sync-int
 # Execute script
-python sync_semantic_scholar_from_scratch.py --key 'FcuPcoxxWC3ePxBABTLvkyWxqvt7v9h32sDBO4ug' -o "./dictionaryOutputTest" 
+python sync_semantic_scholar_from_scratch.py --key '' -o "" 
 # Deactivate virtual environment
 conda deactivate
 

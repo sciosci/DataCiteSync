@@ -67,7 +67,6 @@ def get_links_for_dataset(release_id: str, dataset_name: str, api_key: str) -> D
 
 def get_links_for_each_dataset(release_id: str, dataset_list: List[DatasetInfo], api_key: str) -> DatasetLinks:
     datasets_with_links = list()
-    # print("Dataset_list length: ",len(dataset_list),'\n', dataset_list )
     
     for dataset in dataset_list:
         dataset_links = get_links_for_dataset(release_id, dataset["name"], api_key)
@@ -88,10 +87,12 @@ def download_datasets(release_id: str, dataset_links_list: List[DatasetLinks], o
         if(dataset_links.get("code") != None):
             logging.info("API Key error : Dataset {dataset_name}".format(dataset_name=dataset_links["name"]))
         else:
-            logging.info("Dataset {dataset_name} was downloaded".format(dataset_name=dataset_links["name"]))
-            success = download_files_for_dataset(dataset_links, release_output_path, api_key=api_key, release_id=release_id, testing=testing,)
+            
+            success = download_files_for_dataset(dataset_links, release_output_path, api_key=api_key, release_id=release_id, testing=testing)
             if(success == False):
                 logging.error("Failed to download dataset : {dataset_name}".format(dataset_name=dataset_links["name"]))
+            if(success == True):
+               logging.info("Dataset {dataset_name} was downloaded".format(dataset_name=dataset_links["name"])) 
     return True
 
 
@@ -112,6 +113,7 @@ def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str
     link = 0
     last_downloaded_object = 0
     new_urls = {}
+
     while link < len(dataset_links["files"]):
         if len(new_urls.keys()) == 0:
                 part_name = f"part_{link:03d}"
@@ -120,6 +122,8 @@ def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str
                     link += 1
                     last_downloaded_object = 0
                     continue
+                #If false, then the token timed out and we new urls.
+
                 else:
                     new_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
         else:
@@ -131,6 +135,7 @@ def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str
                     continue
                 else:
                     new_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
+    return True
 
 def download_data_file_as_parquet(output_dir: str, output_filename: str, url: str, checkpoint: int) -> Tuple[bool, int]:
     """
