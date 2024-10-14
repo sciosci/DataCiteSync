@@ -8,9 +8,9 @@ import argparse #
 import pandas as pd
 import pickle
 from tqdm import tqdm
-from typing import List,Tuple, TypedDict, Optional #
+from typing import List,Tuple, TypedDict, Optional, Dict, Any #
 from pathlib import Path
-
+from ratelimit import limits, sleep_and_retry
 
 # Release URL
 RELEASE_URL = "https://api.semanticscholar.org/datasets/v1/release/"
@@ -38,6 +38,9 @@ class DatasetLinks(DatasetInfo):
     message: Optional[str]
     code: Optional[str]
 
+class LinkDownloadStatus(TypedDict): 
+    url: str
+    complete: bool
 
 def get_latest_release() -> str:
     response = requests.get(RELEASE_URL)
@@ -51,7 +54,8 @@ def get_release_info(release_id: str) -> ReleaseInfo:
     release_dict = response.json()
     return release_dict
 
-
+@sleep_and_retry
+@limits(calls=1, period=60)
 def get_links_for_dataset(release_id: str, dataset_name: str, api_key: str) -> DatasetInfo:
     headers = {
         "x-api-key": api_key
@@ -96,47 +100,73 @@ def download_datasets(release_id: str, dataset_links_list: List[DatasetLinks], o
     return True
 
 
-def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str,  api_key: str, release_id:str, testing: bool=False) -> bool:
-    '''
-    An iterative approach to solving the issue of tokens timing out, 
-    per dataset, we are using a while loop to extract the data from the compressed urls.
-    If a token times out on a url, we will request a new batch of urls, ensuring they are always in the same order. 
-    we also keep track of the 
-    '''
+def download_files_for_dataset(dataset_links: DatasetLinks, output_base_dir: str, release_id:str, api_key: str, testing: bool=False) -> bool:
     # Prepare output dir for dataset
     output_dataset_path = "{output_base_dir}/{dataset_name}".format(output_base_dir=output_base_dir, dataset_name=dataset_links["name"])
     output_path = Path(output_dataset_path)
     output_path.mkdir(parents=True, exist_ok=True)
-
-    # For each link in dataset
-    link = 0
-    last_downloaded_object = 0
-    new_urls = {}
-
-    while link < len(dataset_links["files"]):
-        if len(new_urls.keys()) == 0:
-                part_name = f"part_{link:03d}"
-                download_success = download_data_file_as_parquet(output_dataset_path, part_name, dataset_links["files"][link], last_downloaded_object)
-                if download_success == True:
-                    link += 1       
-                
-                else:
-                    #When a token times out, we will get new urls. We need to ensure they are in the same order as the old urls, 
-                    temp_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
-                    # Function returns urls in same order as old urls, ensuring list iteration integrity
-                    new_urls = url_order_validation(old_urls = dataset_links["files"], new_urls = temp_urls) 
-        else:
-                part_name = f"part_{link:03d}"
-                download_success = download_data_file_as_parquet(output_dataset_path, part_name, new_urls["files"][link])
-                if download_success == True:
-                    link += 1 
-                else:
-                    #When a token times out, we will get new urls. We need to ensure they are in the same order as the old urls, 
-                    temp_urls = get_links_for_dataset(release_id=release_id, dataset_name=dataset_links["name"], api_key=api_key )
-                    # Function returns urls in same order as old urls, ensuring list iteration integrity
-                    new_urls = url_order_validation(old_urls = dataset_links["files"], new_urls = temp_urls)
+    # Build Link Download Status dict
+    link_download_status_dict = build_link_status_dict(dataset_links["files"])
+    # Continue downloading until download is complete
+    download_complete = False
+    while(download_complete == False):
+        # Attempt to download file set
+        download_complete, link_download_status_dict  = download_file_set(dataset_links["name"], link_download_status_dict, output_dataset_path, testing)
+        if(download_complete == False):
+            # Refresh links
+            refreshed_dataset_links = get_links_for_dataset(release_id, dataset_links["name"], api_key)
+            # Update link status + url in link status dict
+            link_download_status_dict = update_link_status_dict(refreshed_dataset_links["files"], link_status_dict=link_download_status_dict)
     return True
 
+def download_file_set(dataset_name:str, link_download_status_dict: Dict[str, LinkDownloadStatus], output_dataset_path: str, testing: bool=False) -> Tuple[bool, Any]:
+    # For each link in dataset
+    for i, (filename, link_status_dict) in enumerate(link_download_status_dict.items()):
+        if(link_status_dict["complete"] == False):
+            part_name = filename
+            success = download_data_file_as_parquet(output_dataset_path, filename, link_status_dict["url"])
+            if(success == False):
+                logging.error("Failed to download {dataset_name} : {part_name} : {url}".format(dataset_name=dataset_name, part_name=part_name, url=link_status_dict["url"]))
+                # Exit function if error occured
+                return False, link_download_status_dict
+            else:
+                #key in the link_download_status_dict is a filename, not 'filename': filename_var:{}
+                link_download_status_dict[filename]["complete"] = True
+        if(testing and i == 0):
+            break
+    return True, link_download_status_dict
+
+def get_filename_from_url(url: str) -> str:
+    """
+    URL Name is before the ?,
+    This will split the url into a list of two elements: one before the '?' and one after it.
+    [0] is first list position which returns the file name
+    """ 
+    return url.split('?', 1)[0]
+
+def build_link_status_dict(file_urls: List[str]) -> Dict[str, LinkDownloadStatus]:
+    link_status_dict = dict()
+    for url in file_urls:
+        # Get filename from url
+        filename = get_filename_from_url(url)
+        # Set record in dict
+        link_status_dict[filename] = {
+            "url": url,
+            "complete": False
+        }
+    return link_status_dict
+
+def update_link_status_dict(new_urls: List[str], link_status_dict: Dict[str, LinkDownloadStatus]) -> Dict[str, LinkDownloadStatus]:
+    for url in new_urls:
+        # Get filename from url
+        filename = get_filename_from_url(url)
+        # Get link status dict record
+        record = link_status_dict[filename]
+        # Update record
+        if(record["complete"] == False):
+            # Update link
+            record['url'] = url
+    return link_status_dict
 
 def download_data_file_as_parquet(output_dir: str, output_filename: str, url: str) -> bool:
     records = list()
@@ -171,41 +201,6 @@ def download_data_file_as_parquet(output_dir: str, output_filename: str, url: st
         logging.error(f"General error: {e}")
         return False 
 
-def url_order_validation(old_urls: list, new_urls: list) -> list:
-    """
-    Compares two lists of URLs and sorts the new URLs to match the order of the old URLs,
-    based on the base paths before the query parameters.
-
-    If the new URLs are already in the same order as the old URLs, returns them as is.
-
-    Parameters:
-    - old_urls (list): List of old URL strings.
-    - new_urls (list): List of new URL strings.
-
-    Returns:
-    - sorted_new_urls (list): New URLs sorted to match the order of the old URLs.
-    """
-    # Extract base URLs (before the '?') from the old and new URLs
-    old_bases = [url.split('?', 1)[0] for url in old_urls]
-    new_bases = [url.split('?', 1)[0] for url in new_urls]
-
-    # Check if the base URLs are already in the same order
-    if old_bases == new_bases:
-        return new_urls
-
-    # Create a mapping from base URL to full new URL
-    base_to_new_url = {base: url for base, url in zip(new_bases, new_urls)}
-
-    # Sort the new URLs to match the order of the old base URLs
-    sorted_new_urls = []
-    for base in old_bases:
-        if base in base_to_new_url:
-            sorted_new_urls.append(base_to_new_url[base])
-        else:
-            raise ValueError(f"Base URL '{base}' not found in new URLs.")
-
-    return sorted_new_urls
-
 
 def main():    
     # Parse command line arguments
@@ -231,6 +226,7 @@ def main():
     log_level = logging.INFO
 
     api_key = arguments.key
+
 
     # is_testing = True if arguments.test else False
     is_testing = False
