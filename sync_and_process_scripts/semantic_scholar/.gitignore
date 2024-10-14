@@ -5,3 +5,4 @@ testing_data
 
 trial_scripts/local_run_creds.py
 ./run_sync_semantic_scholar_template
+dict_output
