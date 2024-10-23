@@ -68,7 +68,7 @@ def main():
     """
     
     """
-    headers = {'x-api-key': 'FcuPcoxxWC3ePxBABTLvkyWxqvt7v9h32sDBO4ug'}
+    headers = {'x-api-key': ''}
     base_url = 'https://api.semanticscholar.org/datasets/v1/release/'
 
     base_path = Path(r'')

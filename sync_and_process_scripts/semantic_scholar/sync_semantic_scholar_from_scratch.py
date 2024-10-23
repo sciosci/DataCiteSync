@@ -7,6 +7,7 @@ import logging #
 import argparse #
 import pandas as pd
 import pickle
+import re
 from tqdm import tqdm
 from typing import List,Tuple, TypedDict, Optional, Dict, Any #
 from pathlib import Path
@@ -138,11 +139,21 @@ def download_file_set(dataset_name:str, link_download_status_dict: Dict[str, Lin
 
 def get_filename_from_url(url: str) -> str:
     """
-    URL Name is before the ?,
-    This will split the url into a list of two elements: one before the '?' and one after it.
-    [0] is first list position which returns the file name
+    URL Name is before the ?, and after the amazon S3 path
+    This will split the url into a list of three elements: one before the  final '/', '?',  and one after it.
     """ 
-    return url.split('?', 1)[0]
+    
+    PATTERN = r"(/)([^/]*)(\?)"
+
+    matches = re.findall(PATTERN, url)
+
+    if len(matches) > 0:
+        return matches[0][1]
+    else:
+        # this url did not match the format from before
+        logging.info('Failed to get filename from URL: ', url)
+        return url.split('?', 1)[0]
+        
 
 def build_link_status_dict(file_urls: List[str]) -> Dict[str, LinkDownloadStatus]:
     link_status_dict = dict()
@@ -190,7 +201,9 @@ def download_data_file_as_parquet(output_dir: str, output_filename: str, url: st
                                 continue
 
         records_df = pd.DataFrame(records)
+        
         records_df.to_parquet(f"{output_dir}/{output_filename}.parquet", engine="pyarrow")
+
         return True
     except requests.RequestException as e:
         # Return False and the last processed line 
@@ -227,7 +240,6 @@ def main():
 
     api_key = arguments.key
 
-
     # is_testing = True if arguments.test else False
     is_testing = False
     # Setup logging file
@@ -260,6 +272,10 @@ def main():
         # Get URLs for each file in each dataset
         # return 
         dataset_links_list = get_links_for_each_dataset(latest_release_id, dataset_list, api_key)
+        #save as pickle, 
+        with open(f'{output_base_path_str}/links-{latest_release_id}.pickle', 'wb') as f:
+            pickle.dump(dataset_links_list, f)
+        
     # Download files for each dataset
     dataset_download_success = download_datasets(latest_release_id, dataset_links_list, output_base_path_str, api_key, testing=False )
 
