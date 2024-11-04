@@ -1,4 +1,5 @@
 import ftplib
+import tarfile
 from pathlib import Path
 import sqlite3
 from datetime import datetime
@@ -94,12 +95,14 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir):
         if file_info.get('type') == 'file' and file_name.endswith('.tar.gz'):
             print(entry)
             local_file_path = output_path / file_name
-            # print(f"Downloading {file_name} to {local_file_path}")
             
             # Download the file in binary mode without extracting
             with open(local_file_path, 'wb') as f:
                 ftp.retrbinary(f'RETR {file_name}', f.write)
-            
+
+            # Open the zip file in read mode and return count of items in gzip
+            get_gzip_metadata(file_path=local_file_path) 
+            return 
             # Get the modify timestamp and insert into database
             modify_date = file_info.get('modify')
             # Add some comparison if clause here to avoid duplication
@@ -107,6 +110,14 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir):
                 insert_file_info(db_conn, file_name, modify_date)
     ftp.cwd('..')
 
+def get_gzip_metadata(file_path:str)->dict:
+    contents = {}
+    with tarfile.open(file_path, 'r:gz') as tar:
+        # List all files and directories in the .tar archive
+        for member in tar.getmembers():
+            file_name = member.name
+            print("File name:", file_name)
+            return
 
 if __name__ == "__main__":
     ftp_server = 'ftp.ncbi.nlm.nih.gov'
@@ -125,9 +136,6 @@ if __name__ == "__main__":
     #create second level directory
     second_level_dir = process_second_level_directory(ftp,  db_conn, parent_dir = parent_folders, )
 
-
     # disconnect from FTP and sqlLite
     ftp.quit()
     db_conn.close()
-
-
