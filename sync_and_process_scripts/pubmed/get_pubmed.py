@@ -23,7 +23,7 @@ def create_database(db_path):
     conn.commit()
     return conn
 
-def insert_file_info(conn, filename, modify):
+def insert_file_info(conn, filename, modify, parent_dir, sub_dir):
     cursor = conn.cursor()
     
     # Convert modify timestamp to a datetime object
@@ -79,14 +79,14 @@ def process_second_level_directory(ftp:object, db_con:object, parent_dir:list[st
             output_path = Path(f'{base_output}/{dir}/{folder}')
             # create child directorys
             output_path.mkdir(parents=True, exist_ok=True)
-            write_files_to_directory_with_sqlLite_tracking(ftp, output_path=output_path, sub_dir=folder)
+            write_files_to_directory_with_sqlLite_tracking(ftp, output_path=output_path, sub_dir=folder, parent_dir=dir)
             # write_files_to_directory(ftp,output_path=output_path, sub_dir=folder)
             return 
         # back out, to create sub directories for other folders
         ftp.cwd('..')
         # return after first folder filled to make sure function works correctly
 
-def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir):
+def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir, parent_dir):
     ftp.cwd(sub_dir)
     for entry in ftp.mlsd():
         file_name, file_info = entry
@@ -102,16 +102,16 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir):
 
             # Open the zip file in read mode and return count of items in gzip
             get_gzip_metadata(file_path=local_file_path) 
-            return 
             # Get the modify timestamp and insert into database
             modify_date = file_info.get('modify')
             # Add some comparison if clause here to avoid duplication
             if modify_date:
-                insert_file_info(db_conn, file_name, modify_date)
+                insert_file_info(db_conn, file_name, modify_date, parent_dir, sub_dir)
     ftp.cwd('..')
 
 def get_gzip_metadata(file_path:str)->dict:
     contents = {}
+    
     with tarfile.open(file_path, 'r:gz') as tar:
         # List all files and directories in the .tar archive
         for member in tar.getmembers():
