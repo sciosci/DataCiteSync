@@ -13,7 +13,7 @@ def create_database(db_path):
     CREATE TABLE IF NOT EXISTS files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL,
-        modify TEXT,
+        last_update TEXT,
         downloaded_at TEXT
     )
     ''')
@@ -35,7 +35,7 @@ def insert_file_info(conn, filename, modify):
     downloaded_at = datetime.now().isoformat()
     
     cursor.execute('''
-    INSERT INTO files (filename, modify, downloaded_at)
+    INSERT INTO files (filename, last_update, downloaded_at)
     VALUES (?, ?, ?)
     ''', (filename, modify_str, downloaded_at))
     
@@ -94,7 +94,7 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir):
         if file_info.get('type') == 'file' and file_name.endswith('.tar.gz'):
             print(entry)
             local_file_path = output_path / file_name
-            print(f"Downloading {file_name} to {local_file_path}")
+            # print(f"Downloading {file_name} to {local_file_path}")
             
             # Download the file in binary mode without extracting
             with open(local_file_path, 'wb') as f:
@@ -102,37 +102,18 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir):
             
             # Get the modify timestamp and insert into database
             modify_date = file_info.get('modify')
+            # Add some comparison if clause here to avoid duplication
             if modify_date:
                 insert_file_info(db_conn, file_name, modify_date)
     ftp.cwd('..')
 
-
-
-def write_files_to_directory(ftp:object, output_path:Path, sub_dir:str ): 
-    """
-    download files into appropriate directory
-    """
-    manifest = []
-    ftp.cwd(sub_dir)
-    files = []
-    ftp.retrlines('NLST', files.append)
-    for file in files:
-        #output file destination 
-        output_file_path = output_path / file
-        if file not in manifest:
-            print(f'downloading {file}')
-            with open(output_file_path, 'wb') as f:
-                # download but do not extract zip files
-                ftp.retrbinary(f'RETR {file}', f.write)
-    #back out of sub_dir to download files for next dir
-    ftp.cwd('..')   
 
 if __name__ == "__main__":
     ftp_server = 'ftp.ncbi.nlm.nih.gov'
     main_dir = r'/pub/pmc/oa_package' 
     db_path = 'file_tracking.db'  # SQLite database file
 
-    base_output = r''
+    base_output = r'C:\Users\diego\OneDrive\Desktop\Desktop\Software\Research\DataCiteSync\sync_and_process_scripts\pubmed\output_dir'
     # Make sure FTP server is live and we can still connect to it    
     ftp = connect_to_pubmed(ftp_server=ftp_server, directory= main_dir)
     # Create or connect to the SQLite database
