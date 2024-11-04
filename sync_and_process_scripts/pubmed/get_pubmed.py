@@ -13,9 +13,14 @@ def create_database(db_path):
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT NOT NULL,
+        article_id TEXT NOT NULL,
         last_update TEXT,
-        downloaded_at TEXT
+        downloaded_at TEXT,
+        first_level_dir TEXT,
+        second_level_dir TEXT,
+        image_count TEXT,
+        has_xml BOOL,
+        has_pdf BOOL
     )
     ''')
 
@@ -34,11 +39,11 @@ def insert_file_info(conn, filename, modify, parent_dir, sub_dir):
     
     # Current timestamp for when the file was downloaded
     downloaded_at = datetime.now().isoformat()
-    
+    image_count, has_xml, has_pdf = 0, False, False
     cursor.execute('''
-    INSERT INTO files (filename, last_update, downloaded_at)
-    VALUES (?, ?, ?)
-    ''', (filename, modify_str, downloaded_at))
+    INSERT INTO files (article_id, last_update, downloaded_at, first_level_dir, second_level_dir, image_count, has_xml, has_pdf)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (filename, modify_str, downloaded_at, parent_dir, sub_dir, image_count, has_xml, has_pdf))
     
     conn.commit()
 
@@ -64,7 +69,7 @@ def process_first_level_directory(ftp, base_output:str)->list[str]:
         output_path.mkdir(parents=True, exist_ok=True)
     return files
 
-def process_second_level_directory(ftp:object, db_con:object, parent_dir:list[str])->list[str]:
+def process_second_level_directory(ftp:object, db_conn:object, parent_dir:list[str])->list[str]:
     """
     for every parent folder, 
     create the sub folder directory
@@ -79,14 +84,13 @@ def process_second_level_directory(ftp:object, db_con:object, parent_dir:list[st
             output_path = Path(f'{base_output}/{dir}/{folder}')
             # create child directorys
             output_path.mkdir(parents=True, exist_ok=True)
-            write_files_to_directory_with_sqlLite_tracking(ftp, output_path=output_path, sub_dir=folder, parent_dir=dir)
-            # write_files_to_directory(ftp,output_path=output_path, sub_dir=folder)
+            write_files_to_directory_with_sqlLite_tracking(ftp, db_conn, output_path=output_path, sub_dir=folder, parent_dir=dir)
             return 
         # back out, to create sub directories for other folders
         ftp.cwd('..')
         # return after first folder filled to make sure function works correctly
 
-def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir, parent_dir):
+def write_files_to_directory_with_sqlLite_tracking(ftp, db_conn, output_path, sub_dir, parent_dir):
     ftp.cwd(sub_dir)
     for entry in ftp.mlsd():
         file_name, file_info = entry
@@ -102,6 +106,7 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir, pa
 
             # Open the zip file in read mode and return count of items in gzip
             get_gzip_metadata(file_path=local_file_path) 
+            return 
             # Get the modify timestamp and insert into database
             modify_date = file_info.get('modify')
             # Add some comparison if clause here to avoid duplication
@@ -109,15 +114,28 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, output_path, sub_dir, pa
                 insert_file_info(db_conn, file_name, modify_date, parent_dir, sub_dir)
     ftp.cwd('..')
 
-def get_gzip_metadata(file_path:str)->dict:
-    contents = {}
+def get_gzip_metadata(file_path: str) -> dict:
+    contents = {
+        "pdf": 0,
+        "xml": 0,
+        "jpg": 0
+    }
     
     with tarfile.open(file_path, 'r:gz') as tar:
-        # List all files and directories in the .tar archive
+        # Iterate through each file in the tar archive
         for member in tar.getmembers():
             file_name = member.name
-            print("File name:", file_name)
-            return
+            
+            # Check the file extension and update the count in contents dictionary
+            if file_name.endswith(".pdf"):
+                contents["pdf"] += 1
+            elif file_name.endswith(".xml"):
+                contents["xml"] += 1
+            elif file_name.endswith(".jpg"):
+                contents["jpg"] += 1
+            # Additional file types can be added here if needed
+    print(contents)
+    return
 
 if __name__ == "__main__":
     ftp_server = 'ftp.ncbi.nlm.nih.gov'
@@ -134,7 +152,7 @@ if __name__ == "__main__":
     parent_folders = process_first_level_directory(ftp=ftp, base_output=base_output)
 
     #create second level directory
-    second_level_dir = process_second_level_directory(ftp,  db_conn, parent_dir = parent_folders, )
+    second_level_dir = process_second_level_directory(ftp,  db_conn, parent_dir=parent_folders)
 
     # disconnect from FTP and sqlLite
     ftp.quit()
