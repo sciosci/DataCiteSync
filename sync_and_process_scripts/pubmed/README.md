@@ -58,6 +58,29 @@ if output_dir_for_second_level_entry does not exist
 files_within_second_level = get_files_in_second_level_dir(ftp, second_level_entry)
 for filename in files_within_second_level:
     process_file(first_level_entry, second_level_entry, manifest, filename)
+=================================================================================================
+
+Manifest Structure
+
+Columns in table 1
+- id
+- start time
+- end time
+- records updated (count)
+- records added (count)
+- path to details of sync (a string to a parquet file)
+
+Table 2 columns
+- article id
+- first level directory
+- second level directory
+- file created timestamp
+- file updated timestamp
+- image count
+- has nxml
+- has pdf
+
+
 
 """
 ```
