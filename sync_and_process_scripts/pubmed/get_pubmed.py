@@ -29,7 +29,7 @@ def create_database(db_path):
     conn.commit()
     return conn
 
-def insert_article_information(conn, filename, modify, parent_dir, sub_dir, zip_data):
+def insert_article_information(conn: sqlite3, filename:str, modify:datetime, parent_dir:str, sub_dir:str, zip_data:object)->None:
     cursor = conn.cursor()
     
     # Get the zip information if present, else set to none
@@ -75,7 +75,7 @@ def process_first_level_directory(ftp, base_output:str)->list[str]:
         output_path.mkdir(parents=True, exist_ok=True)
     return files
 
-def process_second_level_directory(ftp:object, db_conn:object, parent_dir:list[str])->list[str]:
+def process_second_level_directory(ftp: object, db_conn:object, parent_dir:list[str], base_output:str):
     """
     for every parent folder, 
     create the sub folder directory
@@ -88,11 +88,12 @@ def process_second_level_directory(ftp:object, db_conn:object, parent_dir:list[s
         ftp.retrlines('NLST',folders.append)
         for folder in folders:
             output_path = Path(f'{base_output}/{dir}/{folder}')
+            # output_path = Path(f'{dir}/{folder}')
             # create child directorys
             output_path.mkdir(parents=True, exist_ok=True)
             write_files_to_directory_with_sqlLite_tracking(ftp, db_conn, output_path=output_path, sub_dir=folder, parent_dir=dir)
-            return 
         # back out, to create sub directories for other folders
+        print('finished a second level directory')
         ftp.cwd('..')
         # return after first folder filled to make sure function works correctly
 
@@ -184,7 +185,7 @@ def get_gzip_metadata(file_path: str) -> dict:
     # print(contents)
     return contents
 
-if __name__ == "__main__":
+def main()->None:
 
     parser = argparse.ArgumentParser(description="""
     Full download of latest sematic scholar dataset release
@@ -193,8 +194,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-o", "--output_dir", help="Output base directory of downloaded files"
     )
-    
-    # Getting arguments passed from 
+    # Getting arguments passed from
     arguments = parser.parse_args()
     base_output = arguments.output_dir
 
@@ -217,10 +217,15 @@ if __name__ == "__main__":
     # create output top structure
     parent_folders = process_first_level_directory(ftp=ftp, base_output=base_output)
 
+    # print('Parent Folders: ', parent_folders)
     #create second level directory
-    second_level_dir = process_second_level_directory(ftp,  db_conn, parent_dir=parent_folders)
+    process_second_level_directory(ftp,  db_conn, parent_dir=parent_folders, base_output=base_output)
 
     # disconnect from FTP and sqlLite
     ftp.quit()
     #close db_conn, 
     db_conn.close()
+
+
+if __name__ == "__main__":
+    main()

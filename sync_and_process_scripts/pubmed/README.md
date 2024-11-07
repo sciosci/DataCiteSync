@@ -84,3 +84,41 @@ Table 2 columns
 
 """
 ```
+
+
+Creating an extract data file
+
+
+folder of interest: oa_package
+
+I want to create a script that once mounted to PL from grobid, we can get the data for pubmed
+
+How the pubmed + manifest directories currently look in my local branch
+
+output_dir / 
+   data / 
+   
+         00/
+           00/ 
+              (zip files)
+                  ...
+         01/ 
+         02/
+ 
+  manifest.db
+                         
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
