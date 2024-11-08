@@ -204,9 +204,8 @@ def main()->None:
     
     #Creating output directory
     output_folder = Path('./output_dir')
-    db_path = output_folder / 'manifest.db'  # SQLite database file
+    db_path = output_folder / 'manifest.db'  # SQLite database filce
     output_folder.mkdir(parents=True, exist_ok=True)
-
 
     # Make sure FTP server is live and we can still connect to it    
     ftp = connect_to_pubmed(ftp_server=ftp_server, directory= starting_pubmed_dir)

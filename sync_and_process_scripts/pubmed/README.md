@@ -108,6 +108,31 @@ output_dir /
   manifest.db
                          
 
+To do's: 
+ ### High Level
+ Create a copy of pubmed data to PL
+    R1. identify the file structure on FTP server
+        (Systematic approach of downloading a very large amount of data) 
+        two digit hexidecimal name
+    R2. Re-create the nested two digit hexidecimal folder structure on our computer
+    
+    - Method of access:
+        - 
+
+    #- How do we access the FTP server
+    #    - Do we need credentials to access endpoint, (no, it is a public server)
+
+     Do we need to track what files we have synced from pubmed.
+        - Yes, tracking helps us moniter the file status in terms of it being up to date 
+
+    R3. What is the status of each file,
+        - Do we need to update it, is it new, what needs to be changed if there is anything
+
+    R4. Sync Attempts. 
+        - How long does the script run, how many files were updates, last time we synced the files
+        - last time we checked
+        - Needed to track our copy of pubmed against the live FTP server, 
+        - lets us know how trustworthy our copy is
 
 
 
@@ -117,8 +142,28 @@ output_dir /
 
 
 
+### What has been done:
+
+- identified pubmed ftp structure, R1, Done
 
 
+- get_pubmed.py
+    - This script creates copy of pubmed on its output_dir, 
+    - syncs from scratch if there is no ouput dir, R2, Done
+    - creates manifest to track synced files, R3
+        - articles_status: R3 Done
+        - run_log: R4
+    - updates manifest and data files if file is outdated, R4 WIP  
+        - update manifest R3 and R4, Pending
+        - update data files, R3 WIP
+        
 
+- create_remote_manifest.py : 
+    - creates a manifest from already existing pubmed copy in dir, R3 WIP
 
-
+### Current Errors I am facing
+- update data files, R3 WIP
+    - EOFError on FTPLib, 
+    - Possible Cause from initial investigation: 
+        FTP servers can see client as idle when reading files, if
+        the files are large, disconnection from FTP server can occur
