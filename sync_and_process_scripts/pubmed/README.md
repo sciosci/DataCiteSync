@@ -135,13 +135,6 @@ To do's:
         - lets us know how trustworthy our copy is
 
 
-
-
-
-
-
-
-
 ### What has been done:
 
 - identified pubmed ftp structure, R1, Done
