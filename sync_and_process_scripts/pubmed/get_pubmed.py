@@ -112,36 +112,21 @@ def process_second_level_directory(ftp: object,ftp_server:str,starting_pubmed_di
         ftp.cwd('..')
         # return after first folder filled to make sure function works correctly
 
+#ftp.sendcmd("NOOP")
+from datetime import datetime
 
 def write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pubmed_dir, db_conn, output_path, sub_dir, parent_dir):
-    cursor = db_conn.cursor()
+    ftp.cwd(sub_dir)
     ftp.sendcmd("NOOP")
-    try:
-        ftp.cwd(sub_dir)
-    except EOFError as e:
-        # Reconnect to FTP server
-        print(f"Connection lost. Reconnecting to FTP server...")
-        ftp = connect_to_pubmed(ftp_server=ftp_server, directory=starting_pubmed_dir)
-        ftp.cwd(parent_dir)
-        ftp.cwd(sub_dir)
-    except Exception as e:
-        # Handle other exceptions
-        downloaded_at = datetime.now().isoformat()
-        cursor.execute('''
-        INSERT INTO pubmed_runtime_data (date_execution, downloaded_at, first_level_dir, second_level_dir)
-        VALUES (?, ?, ?, ?)
-        ''', (downloaded_at, downloaded_at, parent_dir, sub_dir))
-        db_conn.commit()
-        print(f"Error {e} encountered in subdirectory {sub_dir} of {parent_dir}. Logged in pubmed_runtime_data.")
-        return
-
-    # Proceed with the rest of the function
+    cursor = db_conn.cursor()
+    # Getting a list of the files
     for entry in ftp.mlsd():
         file_name, file_info = entry
         
         # Check if the entry is a file and has a .tar.gz extension
         if file_info.get('type') == 'file' and file_name.endswith('.tar.gz'):
             local_file_path = output_path / file_name
+            
             try:
                 # Download the file in binary mode without extracting
                 with open(local_file_path, 'wb') as f:
@@ -157,41 +142,20 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pub
                 if article_needs_update(db_conn=db_conn, article_name=file_name, article_info=file_info):
                     insert_article_information(db_conn, file_name, modify_date, parent_dir, sub_dir, zip_data)
             
-            except EOFError as e:
-                # Handle EOFError during file processing
+            except EOFError:
+                # Capture EOFError details in the runtime data table
                 downloaded_at = datetime.now().isoformat()
+                
                 cursor.execute('''
-                INSERT INTO pubmed_runtime_data (date_execution, downloaded_at, first_level_dir, second_level_dir, file_name)
-                VALUES (?, ?, ?, ?, ?)
-                ''', (downloaded_at, downloaded_at, parent_dir, sub_dir, file_name))
+                INSERT INTO pubmed_runtime_data (date_execution, downloaded_at, first_level_dir, second_level_dir)
+                VALUES (?, ?, ?, ?)
+                ''', (downloaded_at, downloaded_at, parent_dir, sub_dir))
+                
                 db_conn.commit()
-                print(f"Connection lost during processing of file {file_name}. Reconnecting...")
-                time.sleep(1)
-                # Reconnect to the FTP server
-                ftp = connect_to_pubmed(ftp_server=ftp_server, directory=starting_pubmed_dir)
-                ftp.cwd(parent_dir)
-                ftp.cwd(sub_dir)
-                # Retry downloading the file
-                with open(local_file_path, 'wb') as f:
-                    ftp.retrbinary(f'RETR {file_name}', f.write)
-                # Proceed with the rest of the processing as before
-                zip_data = get_gzip_metadata(file_path=local_file_path)
-                modify_date = file_info.get('modify')
-                if article_needs_update(db_conn=db_conn, article_name=file_name, article_info=file_info):
-                    insert_article_information(db_conn, file_name, modify_date, parent_dir, sub_dir, zip_data)
-            except Exception as e:
-                # Handle other exceptions during file processing
-                downloaded_at = datetime.now().isoformat()
-                cursor.execute('''
-                INSERT INTO pubmed_runtime_data (date_execution, downloaded_at, first_level_dir, second_level_dir, file_name)
-                VALUES (?, ?, ?, ?, ?)
-                ''', (downloaded_at, downloaded_at, parent_dir, sub_dir, file_name))
-                db_conn.commit()
-                print(f"Error {e} encountered with file {file_name} in {sub_dir} of {parent_dir}. Logged in pubmed_runtime_data.")
-                # Optionally, continue to the next file or re-raise the exception
-                continue
-
+                print(f"EOFError encountered with file {file_name} in {sub_dir} of {parent_dir}. Logged in pubmed_runtime_data.")
+                
     ftp.cwd('..')
+
 
 
 def article_needs_update(db_conn: sqlite3.Connection, article_name: str, article_info: dict) -> bool:
