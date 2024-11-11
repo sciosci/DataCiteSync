@@ -97,24 +97,27 @@ def process_second_level_directory(ftp: object,ftp_server:str,starting_pubmed_di
     """
     for dir in parent_dir:
         # enter into that dir in the ftp
+        print('Entering:', dir)
         ftp.cwd(dir)
+        ftp.sendcmd("NOOP")
         folders = []
         # get all folders that belong to the parent directory
         ftp.retrlines('NLST',folders.append)
         for folder in folders:
+            print('Inner: ',folder )
             output_path = Path(f'{base_output}/{dir}/{folder}')
             # output_path = Path(f'{dir}/{folder}')
             # create child directorys
             output_path.mkdir(parents=True, exist_ok=True)
             write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pubmed_dir, db_conn, output_path=output_path, sub_dir=folder, parent_dir=dir)
+            break
         # back out, to create sub directories for other folders
-        print('finished a second level directory')
+        print('finished an entire second level directory')
+        print('Exiting:', dir)
         ftp.cwd('..')
         # return after first folder filled to make sure function works correctly
 
 #ftp.sendcmd("NOOP")
-from datetime import datetime
-
 def write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pubmed_dir, db_conn, output_path, sub_dir, parent_dir):
     ftp.cwd(sub_dir)
     ftp.sendcmd("NOOP")
@@ -143,6 +146,7 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pub
                     insert_article_information(db_conn, file_name, modify_date, parent_dir, sub_dir, zip_data)
             
             except EOFError:
+                ftp.sendcmd("NOOP")
                 # Capture EOFError details in the runtime data table
                 downloaded_at = datetime.now().isoformat()
                 

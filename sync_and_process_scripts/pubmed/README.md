@@ -79,12 +79,8 @@ Table 2 columns
 - image count
 - has nxml
 - has pdf
-
-
-
 """
 ```
-
 
 Creating an extract data file
 
@@ -149,14 +145,13 @@ To do's:
     - updates manifest and data files if file is outdated, R4 WIP  
         - update manifest R3 and R4, Pending
         - update data files, R3 WIP
-        
 
 - create_remote_manifest.py : 
     - creates a manifest from already existing pubmed copy in dir, R3 WIP
 
 ### Current Errors I am facing
 - update data files, R3 WIP
-    - EOFError on FTPLib, 
+    - EOFError on FTPLib, (Tentative Solution Found. )
     - Possible Cause from initial investigation: 
         FTP servers can see client as idle when reading files, if
         the files are large, disconnection from FTP server can occur
