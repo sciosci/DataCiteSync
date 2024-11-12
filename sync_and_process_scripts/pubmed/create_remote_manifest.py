@@ -1,57 +1,58 @@
 from pathlib import Path
-import argparse
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import logging
 import sqlite3
-from datetime import datetime, timezone
 import tarfile
-           
-def navigate_data_directories(data_dirs):
-    for first_level_dir in data_dirs.iterdir():
-        if first_level_dir.is_dir():
-            # go into second level dir
-            for second_level_dir in first_level_dir.iterdir():
-                for zip_item in second_level_dir.iterdir():
-                    #create manifest here
-                    print(zip_item,
-                          'first_level_directory: ', first_level_dir.name,
-                          'second_level_directory: ', second_level_dir.name,
-                          )
-                    item_content = get_gzip_metadata(file_path=zip_item)
-                    # if item_content['obj_id'] not in sqlLite table
-                    # add item_content to list of values to add to sql table
+from queue import Queue
 
-def add_values_to_articles_table(articles_list:list[dict])-> None:
-    ''' Adds multiple values to articles_metadata table and 
-    Args:
-        articles_list List[Dict]:  list of zip data that needs to be added to articles table  
 
-    Returns:
-        None
-    '''
-    pass
+
+def process_folder(folder_path):
+    folder_first_level = Path(folder_path)
+    thread_name = threading.current_thread().name
+    print(f'Thread {thread_name} processing folder: {folder_first_level}')
+    try:
+        for folder_second_level in folder_first_level.iterdir():
+            if folder_second_level.is_dir():
+                for file in folder_second_level.iterdir():
+                    # print(f'Thread {thread_name} found file: {file}')\
+
+                    logging.info(f'Thread {thread_name} found file: {file}')
+                    file_data = get_gzip_metadata(file_path=file)
+                    print(file_data)
+                    #here is where the metadata is added to the queue to add the rows? 
+                    
+    except Exception as e:
+        print(f'Error in thread {thread_name}:', e)
 
 
 def get_gzip_metadata(file_path: str) -> dict:
-    contents = {}
+    contents = {
+        'pdf_count': 0,
+        'other_docs': 0,
+        'obj_id': None
+    }
     
     with tarfile.open(file_path, 'r:gz') as tar:
         # Iterate through each file in the tar archive
         for member in tar.getmembers():
             file_name = member.name
-            # print('filename: ', file_name)
             file_extension = file_name.split('.')[-1] if '.' in file_name else 'obj_id'
-            key =  f'{file_extension}_count' if '.' in file_name else 'obj_id'
+            key = 'pdf_count' if file_extension == 'pdf' else ('obj_id' if file_extension == 'obj_id' else 'other_docs')
+            
             # Update the count in contents dictionary for each file type
-            if key in contents:
+            if key == 'obj_id':
+                contents[key] = file_name 
+            elif key == 'pdf_count':
                 contents[key] += 1
-            elif key == 'obj_id':
-                contents[key] = file_name
             else:
-                contents[key] = 1
-    # print(contents)
+                contents['other_docs'] += 1
+                
     return contents
 
 
-def create_manifest(db_path):
+def create_database(db_path)->object:
     # Connect to the SQLite database (or create it if it doesn’t exist)
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -84,52 +85,34 @@ def create_manifest(db_path):
         pdf_count INTEGER
     )
     ''')
+
     # Commit changes and close the connection
     conn.commit()
     return conn
 
 
 
-def main()->None:
+def main():
+    base_directory = Path('./output_dir/data')
+    output_folder = Path('./output_dir')
+    db_path = output_folder / 'threading_queue.db'  # SQLite database filce
 
-    """
-    Ideal outputs:
-        - A manifest of the information already stored in oa_package folder in PL
-        - We are going to run some tests with the current local repo's
-    """
-    #Getting parent directory from shell file
-    parser = argparse.ArgumentParser(description="""
-    Full download of latest pubmed dataset release
-    """)
-    
-    parser.add_argument(
-         "--input_dir", help="Output base directory of downloaded files"
-    )
+    # Create or connect to the SQLite database
+    db_conn = create_database(db_path)
+    logging.basicConfig(
+    filename='output.log',
+    filemode='a',
+    format='%(asctime)s [%(levelname)s] %(threadName)s: %(message)s',
+    level=logging.INFO
+)
 
-    # Getting arguments passed from
-    arguments = parser.parse_args()
-    input_dir = arguments.input_dir
+    folders = [item for item in base_directory.iterdir() if item.is_dir()]
 
-    start_script = datetime.now(timezone.utc) 
-    # dir = Path(input_dir)
-    thread_read_output_dir = Path('./output_dir/data')
-    base_output_directory = Path('./output_dir/test_create')
-
-    db_path = base_output_directory / 'manifest.db'  # SQLite database filce    
-
-    # navigating base directory to ensure that the data directory exists
-   # first_level_directories = navigate_base_level_directory(path=base_output_directory)
-
-    # Now that we have directories in first level, get second level directories
-    #  navigate_data_directories(data_dirs=first_level_directories)
-
-    # create_manifest(db_path=db_path)
-
-    navigate_data_directories(thread_read_output_dir)
+    with ThreadPoolExecutor() as executor:
+        executor.map(process_folder, folders)
 
 
-    
 
+if __name__ =='__main__':
 
-if __name__ == '__main__':
     main()

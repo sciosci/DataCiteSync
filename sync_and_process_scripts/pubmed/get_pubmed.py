@@ -101,6 +101,8 @@ def process_second_level_directory(ftp: object,ftp_server:str,starting_pubmed_di
         ftp.cwd(dir)
         ftp.sendcmd("NOOP")
         folders = []
+        folders_writing_limit = 5
+        folders_written = 0 
         # get all folders that belong to the parent directory
         ftp.retrlines('NLST',folders.append)
         for folder in folders:
@@ -110,7 +112,10 @@ def process_second_level_directory(ftp: object,ftp_server:str,starting_pubmed_di
             # create child directorys
             output_path.mkdir(parents=True, exist_ok=True)
             write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pubmed_dir, db_conn, output_path=output_path, sub_dir=folder, parent_dir=dir)
-            break
+            if folders_written >= folders_writing_limit:
+                break
+            else:
+                folders_written +=1
         # back out, to create sub directories for other folders
         print('finished an entire second level directory')
         print('Exiting:', dir)
@@ -122,6 +127,8 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pub
     ftp.cwd(sub_dir)
     ftp.sendcmd("NOOP")
     cursor = db_conn.cursor()
+    files_written = 0
+    file_writing_limit = 5
     # Getting a list of the files
     for entry in ftp.mlsd():
         file_name, file_info = entry
@@ -144,7 +151,12 @@ def write_files_to_directory_with_sqlLite_tracking(ftp, ftp_server, starting_pub
                 # Check if the article already exists and if it needs updating
                 if article_needs_update(db_conn=db_conn, article_name=file_name, article_info=file_info):
                     insert_article_information(db_conn, file_name, modify_date, parent_dir, sub_dir, zip_data)
-            
+
+                # only writing 5 files per subfolder to mimic structure horizontally
+                if files_written >= file_writing_limit:
+                    break 
+                else:
+                    files_written += 1    
             except EOFError:
                 ftp.sendcmd("NOOP")
                 # Capture EOFError details in the runtime data table
@@ -222,6 +234,8 @@ def get_gzip_metadata(file_path: str) -> dict:
                 contents[key] = 1
     # print(contents)
     return contents
+
+
 
 def main()->None:
 
