@@ -7,11 +7,10 @@ import tarfile
 import datetime
 from queue import Queue
 
-
 def process_folder(folder_path, data_queue):
     folder_first_level = Path(folder_path)
     thread_name = threading.current_thread().name
-    # print(f'Thread {thread_name} processing folder: {folder_first_level}')
+    logging.info(f'Thread {thread_name} processing folder: {folder_first_level}')
     try:
         for folder_second_level in folder_first_level.iterdir():
             if folder_second_level.is_dir():
@@ -21,9 +20,9 @@ def process_folder(folder_path, data_queue):
                     # Add the metadata to the queue
                     data_queue.put(file_data)
     except Exception as e:
-        print(f'Error in thread {thread_name}:', e)
+        logging.exception(f'Error in thread {thread_name}: {e}')
 
-def db_worker(db_path, data_queue, BATCH_SIZE):
+def db_worker(db_path, data_queue, BATCH_SIZE, total_records_inserted):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     batch = []
@@ -33,13 +32,15 @@ def db_worker(db_path, data_queue, BATCH_SIZE):
         if item == "DONE":
             # Insert any remaining items in the batch
             if batch:
-                insert_batch(cursor, batch)
+                records_inserted = insert_batch(cursor, batch)
+                total_records_inserted[0] += records_inserted
                 conn.commit()
             data_queue.task_done()
             break
         batch.append(item)
         if len(batch) >= BATCH_SIZE:
-            insert_batch(cursor, batch)
+            records_inserted = insert_batch(cursor, batch)
+            total_records_inserted[0] += records_inserted
             conn.commit()
             batch = []
         data_queue.task_done()
@@ -64,30 +65,26 @@ def insert_batch(cursor, batch):
             article_id, article_last_update, downloaded_at,
             first_level_dir, second_level_dir,
             image_count, xml_count, pdf_count, other_files
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', insert_data)
-
+    return len(insert_data)  # Return the number of records inserted
 
 def get_gzip_metadata(file_path: str) -> dict:
     contents = {
-        'article_id': None,
+        'article_id': file_path.name,
         'article_last_update': None,
-        'downloaded_at': None,
+        'downloaded_at': get_current_time(),
         'first_level_dir': str(file_path.parent.parent.name),
         'second_level_dir': str(file_path.parent.name),
         'image_count': 0,
         'xml_count': 0,
         'pdf_count': 0,
-        'other_files':0
+        'other_files': 0
     }
     
     with tarfile.open(file_path, 'r:gz') as tar:
         for member in tar.getmembers():
-            file_name = member.name
-            file_extension = file_name.split('.')[-1].lower() if '.' in file_name else ''
-            # Begin Setting values to contents
-            #Fle name is unique so set to article_id
-            contents['article_id'] = file_path.name 
+            file_extension = member.name.split('.')[-1].lower() if '.' in member.name else ''
             if file_extension == 'pdf':
                 contents['pdf_count'] += 1
             elif file_extension == 'xml':
@@ -95,31 +92,18 @@ def get_gzip_metadata(file_path: str) -> dict:
             elif file_extension in ['jpg', 'png', 'gif']:
                 contents['image_count'] += 1
             else:
-                contents['other_files'] += 1  
-    # Set 'article_id', 'article_last_update', 'downloaded_at' as needed
-    # contents['article_last_update'] = extract_last_update(file_path)
-
-    # Current Time 
-    current_time = get_current_time()
-    contents['downloaded_at'] = current_time 
-    contents['article_last_update'] = current_time 
-    
+                contents['other_files'] += 1
     return contents
 
-
 def get_current_time():
-    """
-    Returns current time of article download
-    """
+    """Returns the current time."""
     return datetime.datetime.now().isoformat()
 
-
-def create_database(db_path)->object:
-    # Connect to the SQLite database (or create it if it doesn’t exist)
+def create_database(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Create the table if non-existent
+    # Create articles_metadata table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS articles_metadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,22 +119,20 @@ def create_database(db_path)->object:
     )
     ''')
 
+    # Create pubmed_runtime_data table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS pubmed_runtime_data (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date_execution TEXT NOT NULL,
         run_duration TEXT,
         downloaded_at TEXT,
-        new_zip_files_added INTEGER,
-        zip_files_updated INTEGER
+        new_zip_files_added INTEGER
     )
     ''')
 
     # Commit changes and close the connection
     conn.commit()
-    return conn
-
-
+    conn.close()
 
 def main():
     base_directory = Path('./output_dir/data')
@@ -158,16 +140,26 @@ def main():
     db_path = output_folder / 'threading_queue.db'
     data_queue = Queue()
     BATCH_SIZE = 100  # Adjust as needed
+
     # Create or connect to the SQLite database
     create_database(db_path)
+
     logging.basicConfig(
         filename='output.log',
         filemode='a',
         format='%(asctime)s [%(levelname)s] %(threadName)s: %(message)s',
         level=logging.INFO
     )
+
+    # Record the start time
+    start_time = datetime.datetime.now()
+    total_records_inserted = [0]  # Use a list to allow modification within threads
+
     # Start the database worker thread
-    db_thread = threading.Thread(target=db_worker, args=(db_path,data_queue, BATCH_SIZE))
+    db_thread = threading.Thread(
+        target=db_worker,
+        args=(db_path, data_queue, BATCH_SIZE, total_records_inserted)
+    )
     db_thread.start()
 
     folders = [item for item in base_directory.iterdir() if item.is_dir()]
@@ -177,11 +169,32 @@ def main():
 
     # Wait until all data has been processed
     data_queue.join()
+
     # Send the sentinel value to the db_worker to signal completion
     data_queue.put("DONE")
     db_thread.join()
 
+    # Calculate run duration
+    end_time = datetime.datetime.now()
+    run_duration = str(end_time - start_time)
 
-if __name__ =='__main__':
+    # Update pubmed_runtime_data table
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO pubmed_runtime_data (
+            date_execution,
+            run_duration,
 
+            new_zip_files_added
+        ) VALUES (?, ?, ?)
+    ''', (
+        start_time.isoformat(),
+        run_duration,
+        total_records_inserted[0]
+    ))
+    conn.commit()
+    conn.close()
+
+if __name__ == '__main__':
     main()
