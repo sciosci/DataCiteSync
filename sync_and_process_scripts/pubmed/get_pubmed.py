@@ -97,7 +97,7 @@ def process_second_level_directory(ftp: object,ftp_server:str,starting_pubmed_di
     """
     for dir in parent_dir:
         # enter into that dir in the ftp
-        print('Entering:', dir)
+        # print('Entering:', dir)
         ftp.cwd(dir)
         ftp.sendcmd("NOOP")
         folders = []

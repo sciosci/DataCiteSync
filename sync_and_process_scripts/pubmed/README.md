@@ -122,7 +122,7 @@ To do's:
         - Yes, tracking helps us moniter the file status in terms of it being up to date 
 
     R3. What is the status of each file,
-        - Do we need to update it, is it new, what needs to be changed if there is anything
+        - Do we need to update it, is it new, what is the FTP path from oa_package to reach the file.What needs to be changed if there is anything
 
     R4. Sync Attempts. 
         - How long does the script run, how many files were updates, last time we synced the files
@@ -134,7 +134,6 @@ To do's:
 ### What has been done:
 
 - identified pubmed ftp structure, R1, Done
-
 
 - get_pubmed.py
     - This script creates copy of pubmed on its output_dir, 
@@ -154,4 +153,74 @@ To do's:
     - EOFError on FTPLib, (Tentative Solution Found. )
     - Possible Cause from initial investigation: 
         FTP servers can see client as idle when reading files, if
-        the files are large, disconnection from FTP server can occur
+        the files are large, disconnection from FTP server can occur. 
+
+======================================================================================
+
+November 13th, 2024
+    # High Level:
+    What are we trying to do:
+        1. Create a copy of pubmed data in peta library (see above, for more information on this)
+        2. Create a manifest to track the pubmed information already in PL
+
+# Focusing on High Level #2, what is the manifest, and what will it look like? 
+    ### : Creating PL manifest background
+    In PL, there already is a folder named oa_package, which contains a sample 
+    of the pubmed data. In the same two-digit nested hexidecimal structure.
+    I am tasked with expanding the data of oa_package from a sample of pubmed to a local
+    copy.
+
+    So, what is a manifest? 
+    - A manifest, is a record, which the administrators can use to track our pubmed copy in PL.
+
+    # Note:
+        For our use case a sqLite database will work. 
+   
+
+### Requirements of creating a manifest from oa_package
+     Do we need to track what files we have downloaded from pubmed.
+        - Yes, tracking helps us moniter the file status in terms of it being up to date 
+
+     What is the status of each file,
+        - Do we need to update it,, what is the FTP path from oa_package to reach the zip file.What needs to be changed 
+
+     Sync Attempts. 
+        - How long does the script run, how many files were updates, last time we synced the files
+        - last time we checked
+        - Needed to track our copy of pubmed against the live FTP server, 
+        - lets us know how trustworthy our copy is
+
+    ** Output from script, the manifest **
+    Our manifest will consist of two sheets: 
+    1. articles_metadata:
+        '''metadata information about our zip files''' 
+            path to reach file
+            files contained such as pdfs, xml, gifs, images
+            when was the file last updated on pubmed
+            when did we download the file
+    2. runtime_data:
+        '''runtime information about getting data from pubmed'''
+            new files added
+            files updated
+            date executed
+            runtime start
+            runtime stop
+            errors caught in runtime
+
+
+
+
+
+================================================================================================================================
+# get_pubmed continuiation
+
+November 13th, 2024.
+
+To refresh:
+
+
+
+
+
+
+
