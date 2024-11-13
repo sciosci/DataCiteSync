@@ -3,3 +3,5 @@ output_dir/
 threading_practice.py
 output.log
 ftp_processing.log
+
+shared_thread.py

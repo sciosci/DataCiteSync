@@ -1,3 +1,10 @@
+# To-Do:
+#   After getting feedback from Pawin, 
+#   there isnt a need to pass the sql_object to all the threads. 
+#   In the main thread, we can have the return value from process folder,
+#   such as an object or df, which can make it easier to batch write to sqlLite
+# EXAMPLE: https://docs.python.org/3.12/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
+
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import threading
@@ -6,11 +13,13 @@ import sqlite3
 import tarfile
 import datetime
 from queue import Queue
+import concurrent.futures
 
-def process_folder(folder_path, data_queue):
+def process_folder(folder_path):
     folder_first_level = Path(folder_path)
     thread_name = threading.current_thread().name
     logging.info(f'Thread {thread_name} processing folder: {folder_first_level}')
+    results = []
     try:
         for folder_second_level in folder_first_level.iterdir():
             if folder_second_level.is_dir():
@@ -18,36 +27,18 @@ def process_folder(folder_path, data_queue):
                     logging.info(f'Thread {thread_name} found file: {file}')
                     file_data = get_gzip_metadata(file_path=file)
                     # Add the metadata to the queue
-                    data_queue.put(file_data)
+                    # data_queue.put(file_data)
+                    # Here instead, lets pass the data to a dictionary
+                    results.append(file_data)
+        return results
     except Exception as e:
         logging.exception(f'Error in thread {thread_name}: {e}')
+        return []
 
-def db_worker(db_path, data_queue, BATCH_SIZE, total_records_inserted):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    batch = []
-    
-    while True:
-        item = data_queue.get()
-        if item == "DONE":
-            # Insert any remaining items in the batch
-            if batch:
-                records_inserted = insert_batch(cursor, batch)
-                total_records_inserted[0] += records_inserted
-                conn.commit()
-            data_queue.task_done()
-            break
-        batch.append(item)
-        if len(batch) >= BATCH_SIZE:
-            records_inserted = insert_batch(cursor, batch)
-            total_records_inserted[0] += records_inserted
-            conn.commit()
-            batch = []
-        data_queue.task_done()
-    conn.close()
 
 def insert_batch(cursor, batch):
     insert_data = []
+    print('Batch: ',batch)
     for item in batch:
         insert_data.append((
             item.get('article_id'),
@@ -139,7 +130,7 @@ def main():
     output_folder = Path('./output_dir')
     db_path = output_folder / 'threading_queue.db'
     data_queue = Queue()
-    BATCH_SIZE = 100  # Adjust as needed
+    batch_size = 1000  # Adjust as needed
 
     # Create or connect to the SQLite database
     create_database(db_path)
@@ -153,48 +144,58 @@ def main():
 
     # Record the start time
     start_time = datetime.datetime.now()
-    total_records_inserted = [0]  # Use a list to allow modification within threads
+    total_records_inserted = 0 
 
-    # Start the database worker thread
-    db_thread = threading.Thread(
-        target=db_worker,
-        args=(db_path, data_queue, BATCH_SIZE, total_records_inserted)
-    )
-    db_thread.start()
 
     folders = [item for item in base_directory.iterdir() if item.is_dir()]
+    data_list_to_be_written = []
+    # we want to change to use concurrent futures threadpool since that will let us 
+    # return the object, and we can just append for now, 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        # start the load operations and mark each future 
+        future_to_zip = {executor.submit(process_folder, folder): folder for folder in folders}
+        for future in concurrent.futures.as_completed(future_to_zip):
+            zip_file = future_to_zip[future]
+            try:
+                data = future.result()
+                if data:
+                    data_list_to_be_written.extend(data) 
+            except Exception as exc:
+                print('%r generated an exception: %s' % (zip_file, exc))
+        # Wait until all data has been processed
 
-    with ThreadPoolExecutor() as executor:
-        executor.map(lambda folder: process_folder(folder, data_queue), folders)
 
-    # Wait until all data has been processed
-    data_queue.join()
+    # Now, insert data into the database
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-    # Send the sentinel value to the db_worker to signal completion
-    data_queue.put("DONE")
-    db_thread.join()
+    for i in range(0, len(data_list_to_be_written), batch_size):
+        batch = data_list_to_be_written[i:i+batch_size]
+        records_inserted = insert_batch(cursor, batch)
+        print('records inserted: ',records_inserted, 
+              'total records inserted: ', total_records_inserted)
+        total_records_inserted += records_inserted
+    conn.commit()
 
     # Calculate run duration
     end_time = datetime.datetime.now()
     run_duration = str(end_time - start_time)
 
     # Update pubmed_runtime_data table
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO pubmed_runtime_data (
             date_execution,
             run_duration,
-
             new_zip_files_added
         ) VALUES (?, ?, ?)
     ''', (
         start_time.isoformat(),
         run_duration,
-        total_records_inserted[0]
+        total_records_inserted
     ))
     conn.commit()
     conn.close()
+
 
 if __name__ == '__main__':
     main()
