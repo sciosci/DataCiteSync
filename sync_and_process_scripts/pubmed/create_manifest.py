@@ -15,7 +15,7 @@ import datetime
 from queue import Queue
 import concurrent.futures
 
-def process_folder(folder_path):
+def process_folder(folder_path:str)->list[object]:
     folder_first_level = Path(folder_path)
     thread_name = threading.current_thread().name
     logging.info(f'Thread {thread_name} processing folder: {folder_first_level}')
