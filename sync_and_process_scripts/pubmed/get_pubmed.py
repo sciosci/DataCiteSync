@@ -206,7 +206,7 @@ def get_gzip_data_in_memory(path_to_folder, file_name, ftp, ftp_path, first_leve
         contents['file_binary'] = file_data
 
         # Open the downloaded .tar.gz file
-        with gzip.open(local_file_path, 'rb') as gz_file:
+        with gzip.open(file_data, 'rb') as gz_file:
             with tarfile.open(fileobj=gz_file) as tar:
                 for member in tar.getmembers():
                     if member.isfile():
