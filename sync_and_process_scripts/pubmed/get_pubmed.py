@@ -15,6 +15,8 @@ Multithreading works, but I am implementing it incorrectly right now.
 # imports here
 import ftplib
 import tarfile
+import gzip
+import io
 from pathlib import Path
 import sqlite3
 import time
@@ -54,34 +56,32 @@ def traverse_second_level_directory(ftp_path, output_path, first_level_folder, s
     # enter into the second level directory
     files_to_be_written: List[str] = [] 
     zip_files_in_ftp_directory = []
+
     ftp.cwd(f"{ftp_path}/{first_level_folder}/{second_level_dir_name}")
     path_to_second_level_folder = Path(f"{output_path}/{first_level_folder}/{second_level_dir_name}") 
     path_to_second_level_folder.mkdir(parents=True, exist_ok=True)
+    
     # list of zip files in the current directory here 
     ftp.retrlines('NLST',zip_files_in_ftp_directory.append)
-    try:
+    for gzip_file in ftp.mlsd():
         # iterate through list 
-        for gzip_file in ftp.mlsd():
-            
+        try:
             file_name, file_info = gzip_file
 
+            # some entries from the ftp server can be navigation so we filter those out
+            if file_info.get('type') == 'file' and file_name.endswith('.tar.gz'):
+                local_file_path = output_path / file_name
             # perform an if check here on file information modify
-             
+                gzip_meta = get_gzip_data_in_memory(path_to_second_level_folder, file_name, ftp, ftp_path, first_level_folder, second_level_dir_name)
+                files_to_be_written.append(gzip_meta)
             # if the table is completely empty (first time running) 
             if not sql_filtered_tbl:
-               metadata = get_gzip_metadata(gzip_file, path_to_second_level_folder)
-            #    print(f'metadata: {metadata}, \n, file_info: {file_info}, \n file_name: {file_name}') 
-                
+               pass
+               
+        except Exception as exc:
+            print(f'Error in traverse second level directory: {exc}') 
 
-
-    except Exception as exc:
-        print(f'Error in traverse second level directory: {exc}') 
-
-    
-    # print('Zip files here')
-    # Here I do the metadata check against the sql data
-    # zip_files = active_ftp.nlst()
-
+    return files_to_be_written
 
 def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db_path):
     """
@@ -109,12 +109,12 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
         # go now into the second level folder
         for item in items:
             # print(item)
-            traverse_second_level_directory(pubmed_dir, output_dir_path, first_level_folder, sql_filtered_tbl, ftp=ftp, second_level_dir_name=item,  )
+            second_dir = traverse_second_level_directory(pubmed_dir, output_dir_path, first_level_folder, sql_filtered_tbl, ftp=ftp, second_level_dir_name=item,  )
         
         ftp.quit()  # Close the connection
 
         # Return folder name and its contents
-        return (first_level_folder, items)
+        return second_dir
     except Exception as e:
         return (first_level_folder, f"Error: {e}")
 
@@ -175,35 +175,58 @@ def create_database(db_path)-> None:
     conn.close()
     
 
-def get_gzip_metadata(gzip_file: tuple[str, object], path_to_folder) -> dict:
+def get_gzip_data_in_memory(path_to_folder, file_name, ftp, ftp_path, first_level_folder, second_level_folder)->object:
+# Create the contents dictionary
     contents = {
-        'binary_content': None,
-        'path_to_folder':path_to_folder,
-        'article_id': gzip_file[0],
-        'article_last_update': None,
+        'file_binary': None,
+        'path_to_folder': path_to_folder,
+        'article_id': file_name,
+        'article_last_update': None,  # Update if you have this info
         'downloaded_at': get_current_time(),
-        'first_level_dir': None,
-        'second_level_dir': None,
         'image_count': 0,
         'xml_count': 0,
         'pdf_count': 0,
-        'other_files': 0
+        'other_files': 0 
     }
-    print(f'gzip_file: {gzip_file}, \n \n path to folder:  {path_to_folder}')
-    # return
-    with tarfile.open(f'{path_to_folder}/{gzip_file[0]}', 'r:gz') as tar:
-        for member in tar.getmembers():
-            file_extension = member.name.split('.')[-1].lower() if '.' in member.name else ''
-            if file_extension == 'pdf':
-                contents['pdf_count'] += 1
-            elif file_extension == 'xml':
-                contents['xml_count'] += 1
-            elif file_extension in ['jpg', 'png', 'gif']:
-                contents['image_count'] += 1
-            else:
-                contents['other_files'] += 1
-    print(contents)
-    return contents
+    try:
+        # Define the local file path
+        local_file_path = Path(f'{path_to_folder}/{file_name}')
+
+        # Open a local file for writing binary data
+        # with open(local_file_path, 'wb') as local_file:
+        #     # Download the file and write it directly to disk
+        #     ftp.retrbinary(f'RETR {file_name}', local_file.write)
+        # Use BytesIO to store file content in memory
+        
+        # storing the binary in a data structure
+        file_data = io.BytesIO()
+        file_ftp_path = f'{ftp_path}/{first_level_folder}/{second_level_folder}/{file_name}'
+        ftp.retrbinary(f"RETR {file_ftp_path}", file_data.write)
+        file_data.seek(0)  # Reset pointer to the start of the BytesIO object
+        contents['file_binary'] = file_data
+
+        # Open the downloaded .tar.gz file
+        with gzip.open(local_file_path, 'rb') as gz_file:
+            with tarfile.open(fileobj=gz_file) as tar:
+                for member in tar.getmembers():
+                    if member.isfile():
+                        filename_lower = member.name.lower()
+                        if filename_lower.endswith('.pdf'):
+                            contents['pdf_count'] += 1
+                        elif filename_lower.endswith('.xml'):
+                            contents['xml_count'] += 1
+                        elif filename_lower.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                            contents['image_count'] += 1
+                        else:
+                            contents['other_files'] += 1
+
+        # Optionally, store or log the contents
+        print(f"Processed '{file_name}': {contents}")
+        return contents
+        # reconnect here
+    except Exception as e:
+        print(f"Error processing '{file_name}': {e}")
+
 
 def get_current_time():
     """Returns the current time."""
@@ -238,7 +261,7 @@ def main():
         for future in concurrent.futures.as_completed(future_to_zip):
             zip_file = future_to_zip[future]
             try:
-                print(future.result())
+                print(f'finished thread: {future.result()}')
             except Exception as exc:
                 print('%r generated as exception: %s' % (zip_file, exc))
                  
