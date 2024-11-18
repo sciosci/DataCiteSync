@@ -10,6 +10,12 @@ Why am I multithreading with a sqlConnection,
     Improving the speed of checks between FTP data and pl data. 
 Multithreading works, but I am implementing it incorrectly right now.  
 
+Storing the intermediate data can take up alot of memory. 
+Alternatives to aggregate the data instead of a list of objects, 
+- parquet file
+- pickle file
+- pandas dataframe
+
 '''
 
 # imports here
@@ -80,8 +86,9 @@ def traverse_second_level_directory(ftp_path, output_path, first_level_folder, s
                
         except Exception as exc:
             print(f'Error in traverse second level directory: {exc}') 
-
+    ftp.cwd('..')
     return files_to_be_written
+
 
 def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db_path):
     """
@@ -221,7 +228,7 @@ def get_gzip_data_in_memory(path_to_folder, file_name, ftp, ftp_path, first_leve
                             contents['other_files'] += 1
 
         # Optionally, store or log the contents
-        print(f"Processed '{file_name}': {contents}")
+        # print(f"Processed '{file_name}': {contents}")
         return contents
         # reconnect here
     except Exception as e:
