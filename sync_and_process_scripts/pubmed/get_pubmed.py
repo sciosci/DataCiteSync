@@ -6,19 +6,22 @@ Current issue's I am facing.
 - [X] File Binary is not writing
 
 Steps Algorithm needs to complete before considered finished
-- [ ] checking if the file existing in output directory and manifest needs to be updated
+- [WIP] checking if the file existing in output directory and manifest needs to be updated
+    - [X] Read SQL data from manifest
+    - Do comparison
 - [X] Bulk Write to SQL
 - [X] Manifest Updates 
 '''
 
 # imports here
 import time, logging, ftplib, tarfile, gzip, io
+import traceback
 from pathlib import Path
 import sqlite3
-import datetime
+from datetime import datetime
 import argparse #
 import concurrent.futures
-from typing import List
+from typing import List, Tuple
 from io import BytesIO
 
 
@@ -29,6 +32,64 @@ def connect_to_pubmed(ftp_server:str, starting_ftp_directory:str)->object:
     # cwd is change into /dir
     ftp.cwd(starting_ftp_directory)
     return ftp
+
+def get_manifest_data_from_first_level_dir(db_conn, first_level_folder):
+    try:
+        # Enable dictionary-like access for rows
+        db_conn.row_factory = sqlite3.Row
+        cursor = db_conn.cursor()
+        
+        # Parameterized query to prevent SQL injection
+        query = "SELECT * FROM articles_metadata WHERE first_level_dir = ?"
+        cursor.execute(query, (first_level_folder,))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.info(f'Error in get Manifest data thread:{e}' )    
+
+
+
+def get_articles_by_folder(db_path: str, folder: str) -> List[Tuple]:
+    """
+    Query the articles_metadata table for rows where first_level_folder matches the specified folder.
+
+    Args:
+        db_path (str): Path to the SQLite database file.
+        folder (str): The value of the first_level_folder to filter by.
+
+    Returns:
+        List[Tuple]: A list of rows that match the query, where each row is represented as a tuple.
+    """
+    query = "SELECT * FROM articles_metadata WHERE first_level_dir = ?"
+    results = []
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Execute the query with the parameter
+        cursor.execute(query, (folder,))
+
+        # Fetch all matching rows
+        results = cursor.fetchall()
+
+    except sqlite3.Error as e:
+        print(f"SQLite error: {e}")
+    finally:
+        # Ensure the connection is closed
+        if conn:
+            conn.close()
+
+    return results
+
+
+
+def connect_to_ftp()->object:
+    ftp_server = 'ftp.ncbi.nlm.nih.gov'
+    ftp = ftplib.FTP(ftp_server)
+    # Login anonymous user and password
+    ftp.login()
+    return ftp
+
 
 def get_first_level_directory(ftp)->list[str]:
     # filenames = ftp.nlst()
@@ -41,57 +102,96 @@ def get_first_level_directory(ftp)->list[str]:
 
 def convert_ftp_file_modify_to_datetime(file_info)-> str:
 
-    # Parse the string into a datetime object]
-    if file_info is object:
-        dt = datetime.strptime(file_info.modify, '%Y%m%d%H%M%S')
-        # Convert to ISO 8601 format
-        return dt.isoformat()
+    # Parse the string into a datetime object
+    if isinstance(file_info, dict):
+        dt = datetime.strptime(file_info.get('modify'), '%Y%m%d%H%M%S')
+        return dt
     else:
         return None
 
 
-
-def traverse_second_level_directory(ftp_path, output_path, first_level_folder, sql_filtered_tbl, ftp, second_level_dir_name )->list[str]:
-    '''
-    This function we want check multiple things: 
+def traverse_second_level_directory(
+    ftp_path, output_path, first_level_folder, sql_filtered_tbl, ftp, second_level_dir_name
+) -> list[str]:
+    """
+    This function checks multiple things:
        1. Which files are in the database -> Pass over them
-       2. Which files are NOT in the database -> Add themn to files_to_be_written, and write to output dir
-       3. Which files are in database but have old data -> Add themn to files_to_be_written, and write to output dir
+       2. Which files are NOT in the database -> Add them to files_to_be_written, and write to output dir
+       3. Which files are in database but have old data -> Add them to files_to_be_written, and write to output dir
 
-    Files will be written to database AND outputdirectory after individual threads complete in batch, no writing will occur during this function.
-    '''
-    # enter into the second level directory
-    files_to_be_written: List[object] = [] 
-    zip_files_in_ftp_directory = []
+    Files will be written to database AND output directory after individual threads complete in batch,
+    no writing will occur during this function.
+    """
+    # Enter into the second level directory
+    files_to_be_written: List[object] = []
 
-    ftp.cwd(f"{ftp_path}/{first_level_folder}/{second_level_dir_name}")
-    path_to_second_level_folder = Path(f"{output_path}/{first_level_folder}/{second_level_dir_name}") 
+    path_to_second_level_folder = Path(f"{output_path}/{first_level_folder}/{second_level_dir_name}")
     path_to_second_level_folder.mkdir(parents=True, exist_ok=True)
-    
-    # list of zip files in the current directory here 
-    logging.info(f'Entered {first_level_folder}/{second_level_dir_name}')
-    ftp.retrlines('NLST',zip_files_in_ftp_directory.append)
-    for gzip_file in ftp.mlsd():
-        # iterate through list 
-        try:
-            file_name, file_info = gzip_file
 
-            # some entries from the ftp server can be navigation so we filter those out
-            if file_info.get('type') == 'file' and file_name.endswith('.tar.gz'):
-                # get the modified date 
-                article_last_modified = convert_ftp_file_modify_to_datetime(file_info) 
-            # perform an if check here on file information modify
-                gzip_meta = get_gzip_data_in_memory(path_to_second_level_folder, file_name, ftp, ftp_path, first_level_folder, second_level_dir_name, article_last_modified)
-                files_to_be_written.append(gzip_meta)
-            # if the table is completely empty (first time running) 
-            if not sql_filtered_tbl:
-               pass
-               
-        except Exception as exc:
-            logging.info(f'Error in traverse second level directory: {exc}') 
-    logging.info(f'Exiting {first_level_folder}/{second_level_dir_name}') 
+    logging.info(f'Entered {first_level_folder}/{second_level_dir_name}')
+
+    # Retrieve the list of files in the directory
+    try:
+        ftp.cwd(f"{ftp_path}/{first_level_folder}/{second_level_dir_name}")
+        file_list = list(ftp.mlsd())
+
+    except Exception as e:
+        logging.error(f"Error retrieving file list: {e}")
+        # Reconnect and retry
+        ftp = connect_to_ftp()
+        ftp.cwd(f"{ftp_path}/{first_level_folder}/{second_level_dir_name}")
+        file_list = list(ftp.mlsd())
+
+    for gzip_file in file_list:
+        retries = 0
+        max_retries = 3
+        while retries < max_retries:
+            try:
+                file_name, file_info = gzip_file
+
+                # Filter out non-file entries
+                if file_info.get('type') == 'file' and file_name.endswith('.tar.gz'):
+                    # Get the modified date
+                    article_last_modified = convert_ftp_file_modify_to_datetime(file_info)
+
+                    # Ensure the connection is alive
+                    ftp.voidcmd("NOOP")
+
+                    gzip_meta = get_gzip_data_in_memory(
+                        path_to_second_level_folder,
+                        file_name,
+                        ftp,
+                        ftp_path,
+                        first_level_folder,
+                        second_level_dir_name,
+                        article_last_modified,
+                    )
+                    files_to_be_written.append(gzip_meta)
+
+                # If the table is completely empty (first time running)
+                if not sql_filtered_tbl:
+                    pass
+
+                # Break out of the retry loop if successful
+                break
+
+            except Exception as exc:
+                retries += 1
+                logging.info(f'Error processing file {file_name}: {exc}, retry {retries}')
+                try:
+                    ftp.close()
+                except Exception:
+                    pass
+                ftp = connect_to_ftp()
+                ftp.cwd(f"{ftp_path}/{first_level_folder}/{second_level_dir_name}")
+
+        else:
+            logging.error(f"Failed to process file {file_name} after {max_retries} retries.")
+
+    logging.info(f'Exiting {first_level_folder}/{second_level_dir_name}')
     ftp.cwd('..')
     return files_to_be_written
+
 
 
 def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db_path):
@@ -116,7 +216,8 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
         # Get the list of second-level directories
         items = ftp.nlst()
 
-        batch_size = 2  # Number of second-level directories per batch
+        # Number of second-level directories per batch
+        batch_size = 2  
 
         # Process items in batches, reducing memory and speeding up the script
         for i in range(0, len(items), batch_size):
@@ -146,19 +247,6 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
         return False
 
 
-
-def get_manifest_data_from_first_level_dir(db_conn, first_level_folder):
-    try:
-        # Enable dictionary-like access for rows
-        db_conn.row_factory = sqlite3.Row
-        cursor = db_conn.cursor()
-        
-        # Parameterized query to prevent SQL injection
-        query = "SELECT article_last_update FROM articles_metadata WHERE first_level_dir = ?"
-        cursor.execute(query, (first_level_folder,))
-        return cursor.fetchall()
-    except Exception as e:
-        logging.info(f'Error in get Manifest data thread:{e}' )    
 
 
 def create_database(db_path)-> None:
@@ -221,13 +309,8 @@ def get_gzip_data_in_memory(path_to_folder, file_name, ftp, ftp_path, first_leve
         # Define the local file path
         # local_file_path = Path(f'{path_to_folder}/{file_name}')
 
-        # Open a local file for writing binary data
-        # with open(local_file_path, 'wb') as local_file:
-        #     # Download the file and write it directly to disk
-        #     ftp.retrbinary(f'RETR {file_name}', local_file.write)
-        # Use BytesIO to store file content in memory
+        # storing the binary in a dictionary
         
-        # storing the binary in a data structure
         file_data = io.BytesIO()
         file_ftp_path = f'{ftp_path}/{first_level_folder}/{second_level_folder}/{file_name}'
         ftp.retrbinary(f"RETR {file_ftp_path}", file_data.write)
@@ -255,13 +338,15 @@ def get_gzip_data_in_memory(path_to_folder, file_name, ftp, ftp_path, first_leve
         # reconnect here
     except Exception as e:
         print(f"Error processing '{first_level_folder}/{second_level_folder}/{file_name}': {e}")
+        logging.error(f"Error processing '{first_level_folder}/{second_level_folder}/{file_name}': {e}")
+        logging.error(traceback.format_exc())
 
 
 
 
 def get_current_time():
     """Returns the current time."""
-    return datetime.datetime.now().isoformat()
+    return datetime.now().isoformat()
 
 def setup_logger():
     # Configure the logging
@@ -282,7 +367,7 @@ def write_file_to_output_dir(pubmed_result_data):
     Only to be done if files do not yet exist in the database or if they 
     need to be updated. 
     '''
-    logging.info(f"pubmed result data array of objects:  {pubmed_result_data} ")
+    # logging.info(f"pubmed result data array of objects:  {pubmed_result_data} ")
     for obj in pubmed_result_data:
         
         try: 
@@ -313,6 +398,7 @@ def write_file_to_output_dir(pubmed_result_data):
                 file.write(file_binary.read())
         except Exception as e:
            logging.error(f"Error writing file {obj} to output dir: {e}")
+           logging.error(traceback.format_exc())
 
 
 def batch_upload_to_sql(pubmed_result_data, db_path):
@@ -389,20 +475,22 @@ def main():
     
      # connect to sqLite database
     create_database(db_path)
-   
+    db_conn = sqlite3.connect(db_path) 
+    first_level_table = get_articles_by_folder(db_path=db_path, folder='00')
+    print(first_level_table)
+    return
     # get pubmed first level folders
     first_level_folders = get_first_level_directory(ftp=ftp)
+    # FTP is not thread safe, so we are closing this instance and each thread will have its own. 
     ftp.quit()
 
-    # Process a subset of first-level folders for testing
-    first_twenty = first_level_folders[:10]
-
+    
     # Use ThreadPoolExecutor to process folders concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         future_to_folder = {
             executor.submit(
                 process_folder, ftp_host, starting_pubmed_dir, folder, output_folder, db_path
-            ): folder for folder in first_twenty
+            ): folder for folder in first_level_folders
         }
         for future in concurrent.futures.as_completed(future_to_folder):
             folder = future_to_folder[future]
