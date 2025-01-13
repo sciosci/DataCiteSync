@@ -1,16 +1,14 @@
 '''
-Notes on December 2nd:
+Notes on Jan 13th:
 
-RAM is not the issue, grobid can handle the information for many files at once, 
-Current issue's I am facing. 
+RAM is not the issue, grobid can handle the information for many files at once,
+Current issue's I am facing.
 - [X] File Binary is not writing
 
 Steps Algorithm needs to complete before considered finished
 - [WIP] checking if the file existing in output directory and manifest needs to be updated
-    - [X] Read SQL data from manifest
-    - Do comparison
 - [X] Bulk Write to SQL
-- [X] Manifest Updates 
+- [X] Manifest Updates
 '''
 
 # imports here
@@ -38,13 +36,13 @@ def get_manifest_data_from_first_level_dir(db_conn, first_level_folder):
         # Enable dictionary-like access for rows
         db_conn.row_factory = sqlite3.Row
         cursor = db_conn.cursor()
-        
+
         # Parameterized query to prevent SQL injection
         query = "SELECT * FROM articles_metadata WHERE first_level_dir = ?"
         cursor.execute(query, (first_level_folder,))
         return cursor.fetchall()
     except Exception as e:
-        logging.info(f'Error in get Manifest data thread:{e}' )    
+        logging.info(f'Error in get Manifest data thread:{e}' )
 
 
 
@@ -61,7 +59,7 @@ def get_articles_by_folder(db_path: str, folder: str) -> List[Tuple]:
     """
     query = "SELECT * FROM articles_metadata WHERE first_level_dir = ?"
     results = []
-    
+
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -96,7 +94,7 @@ def get_first_level_directory(ftp)->list[str]:
     files = []
     # get filenames
     ftp.retrlines('NLST',files.append)
-    # 
+    #
     return files
 
 
@@ -217,7 +215,7 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
         items = ftp.nlst()
 
         # Number of second-level directories per batch
-        batch_size = 2  
+        batch_size = 2
 
         # Process items in batches, reducing memory and speeding up the script
         for i in range(0, len(items), batch_size):
@@ -253,7 +251,7 @@ def create_database(db_path)-> None:
     '''
     Connect to the sqLite database (or create it if it doesn’t exist)
     '''
-    
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -285,10 +283,10 @@ def create_database(db_path)-> None:
     )
     ''')
 
-    # Commit changes 
+    # Commit changes
     conn.commit()
     conn.close()
-    
+
 
 def get_gzip_data_in_memory(path_to_folder, file_name, ftp, ftp_path, first_level_folder, second_level_folder, article_last_modified)->object:
 # Create the contents dictionary
@@ -303,14 +301,14 @@ def get_gzip_data_in_memory(path_to_folder, file_name, ftp, ftp_path, first_leve
         'image_count': 0,
         'xml_count': 0,
         'pdf_count': 0,
-        'other_files': 0 
+        'other_files': 0
     }
     try:
         # Define the local file path
         # local_file_path = Path(f'{path_to_folder}/{file_name}')
 
         # storing the binary in a dictionary
-        
+
         file_data = io.BytesIO()
         file_ftp_path = f'{ftp_path}/{first_level_folder}/{second_level_folder}/{file_name}'
         ftp.retrbinary(f"RETR {file_ftp_path}", file_data.write)
@@ -348,13 +346,13 @@ def get_current_time():
     """Returns the current time."""
     return datetime.now().isoformat()
 
-def setup_logger():
+def setup_logger(output_folder):
     # Configure the logging
     logging.basicConfig(
         level=logging.INFO,  # Set the logging level
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Format of log messages
         handlers=[
-            logging.FileHandler("output_dir/app.log"),  # Log to a file
+            logging.FileHandler(output_folder / "app.log"),  # Log to a file
             logging.StreamHandler()  # Also log to console
         ]
     )
@@ -363,14 +361,14 @@ def setup_logger():
 
 def write_file_to_output_dir(pubmed_result_data):
     '''
-    Writing the file binary to the output directories. 
-    Only to be done if files do not yet exist in the database or if they 
-    need to be updated. 
+    Writing the file binary to the output directories.
+    Only to be done if files do not yet exist in the database or if they
+    need to be updated.
     '''
     # logging.info(f"pubmed result data array of objects:  {pubmed_result_data} ")
     for obj in pubmed_result_data:
-        
-        try: 
+
+        try:
             if obj is None:
                 logging.error("Encountered NoneType object, skipping...")
                 continue
@@ -378,21 +376,21 @@ def write_file_to_output_dir(pubmed_result_data):
             if not isinstance(obj, dict):
                 logging.error(f"Unexpected object type: {type(obj)}, skipping...")
                 continue
-            
+
             file_binary = obj['file_binary']  # Binary data of the tar.gz file
             path_to_folder = obj['path_to_folder']  # The PosixPath object for the folder
             file_name = obj['article_id']  # Name of the tar.gz file
-            
+
             # Ensure the output folder exists
             path_to_folder.mkdir(parents=True, exist_ok=True)
-            
+
             # Define the file path for the .tar.gz file
             tar_file_path = path_to_folder / file_name
-            
+
             # Reset the pointer of the file_binary object to the beginning
             if hasattr(file_binary, "seek"):
                 file_binary.seek(0)
-            
+
             # Write the binary data to the .tar.gz file
             with tar_file_path.open("wb") as file:
                 file.write(file_binary.read())
@@ -412,7 +410,7 @@ def batch_upload_to_sql(pubmed_result_data, db_path):
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Use a transaction for batch operation
     conn.execute("BEGIN TRANSACTION")
     try:
@@ -428,7 +426,7 @@ def batch_upload_to_sql(pubmed_result_data, db_path):
             image_count = obj['image_count']
             xml_count = obj['xml_count']
             pdf_count = obj['pdf_count']
-            
+
             # Ensure article_id is not None
             if not article_id:
                 logging.warning("Skipping entry with missing article_id.")
@@ -446,7 +444,7 @@ def batch_upload_to_sql(pubmed_result_data, db_path):
                 first_level_dir, second_level_dir,
                 image_count, xml_count, pdf_count
             ))
-        
+
         # Commit the transaction
         conn.commit()
     except sqlite3.DatabaseError as e:
@@ -457,7 +455,7 @@ def batch_upload_to_sql(pubmed_result_data, db_path):
     finally:
         # Close the connection
         conn.close()
-        
+
 
 
 def main():
@@ -465,26 +463,25 @@ def main():
     ftp_host = 'ftp.ncbi.nlm.nih.gov'
     starting_pubmed_dir = r'/pub/pmc/oa_package'
 
-    output_folder = Path('./output_dir')
+    output_folder = Path('/home/dimu6211/pl/pubmed-01102025')
+    # /home/dimu6211/pl/pubmed-01102025
     db_path = output_folder / 'manifest.db'
     output_folder.mkdir(parents=True, exist_ok=True)
-    logger = setup_logger()
+    logger = setup_logger(output_folder)
 
     # Initial FTP connection to get first-level folders
     ftp = connect_to_pubmed(ftp_server=ftp_host, starting_ftp_directory=starting_pubmed_dir)
-    
+
      # connect to sqLite database
     create_database(db_path)
-    db_conn = sqlite3.connect(db_path) 
+    db_conn = sqlite3.connect(db_path)
     first_level_table = get_articles_by_folder(db_path=db_path, folder='00')
-    print(first_level_table)
-    return
     # get pubmed first level folders
     first_level_folders = get_first_level_directory(ftp=ftp)
-    # FTP is not thread safe, so we are closing this instance and each thread will have its own. 
+    # FTP is not thread safe, so we are closing this instance and each thread will have its own.
     ftp.quit()
 
-    
+
     # Use ThreadPoolExecutor to process folders concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         future_to_folder = {
