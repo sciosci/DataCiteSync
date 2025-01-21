@@ -1,6 +1,6 @@
 # To-Do:
-#   After getting feedback from Pawin, 
-#   there isnt a need to pass the sql_object to all the threads. 
+#   After getting feedback from Pawin,
+#   there isnt a need to pass the sql_object to all the threads.
 #   In the main thread, we can have the return value from process folder,
 #   such as an object or df, which can make it easier to batch write to sqlLite
 # EXAMPLE: https://docs.python.org/3.12/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
@@ -63,7 +63,7 @@ def insert_batch(cursor, batch):
 def get_gzip_metadata(file_path: str) -> dict:
     contents = {
         'article_id': file_path.name,
-        'article_last_update': None,
+        'article_last_update': get_current_time(),
         'downloaded_at': get_current_time(),
         'first_level_dir': str(file_path.parent.parent.name),
         'second_level_dir': str(file_path.parent.name),
@@ -72,7 +72,7 @@ def get_gzip_metadata(file_path: str) -> dict:
         'pdf_count': 0,
         'other_files': 0
     }
-    
+
     with tarfile.open(file_path, 'r:gz') as tar:
         for member in tar.getmembers():
             file_extension = member.name.split('.')[-1].lower() if '.' in member.name else ''
@@ -126,9 +126,9 @@ def create_database(db_path):
     conn.close()
 
 def main():
-    base_directory = Path('./output_dir/data')
-    output_folder = Path('./output_dir')
-    db_path = output_folder / 'threading_queue.db'
+    base_directory = Path('/home/dimu6211/pl/oa_package')
+    output_folder = base_directory
+    db_path = output_folder / 'manifest.db'
     data_queue = Queue()
     batch_size = 1000  # Adjust as needed
 
@@ -144,22 +144,22 @@ def main():
 
     # Record the start time
     start_time = datetime.datetime.now()
-    total_records_inserted = 0 
+    total_records_inserted = 0
 
 
     folders = [item for item in base_directory.iterdir() if item.is_dir()]
     data_list_to_be_written = []
-    # we want to change to use concurrent futures threadpool since that will let us 
-    # return the object, and we can just append for now, 
+    # we want to change to use concurrent futures threadpool since that will let us
+    # return the object, and we can just append for now,
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        # start the load operations and mark each future 
+        # start the load operations and mark each future
         future_to_zip = {executor.submit(process_folder, folder): folder for folder in folders}
         for future in concurrent.futures.as_completed(future_to_zip):
             zip_file = future_to_zip[future]
             try:
                 data = future.result()
                 if data:
-                    data_list_to_be_written.extend(data) 
+                    data_list_to_be_written.extend(data)
             except Exception as exc:
                 print('%r generated an exception: %s' % (zip_file, exc))
         # Wait until all data has been processed
@@ -172,7 +172,7 @@ def main():
     for i in range(0, len(data_list_to_be_written), batch_size):
         batch = data_list_to_be_written[i:i+batch_size]
         records_inserted = insert_batch(cursor, batch)
-        print('records inserted: ',records_inserted, 
+        print('records inserted: ',records_inserted,
               'total records inserted: ', total_records_inserted)
         total_records_inserted += records_inserted
     conn.commit()
