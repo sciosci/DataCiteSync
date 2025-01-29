@@ -10,3 +10,6 @@ ftp_processing.log
 mini_oa/output
 mini_oa/__pycache__
 shared_thread.py
+
+version2/output
+version2/__pycache__

@@ -1,56 +1,16 @@
-"""
-Notes from Jan 28th, 2025
- - Added strict python type checking
- - retrBinary read binary (rb) is unnecesary, write binary 'wb' can download to output folder and 
- overrides old files so it takes care of tracking old files in memory to be re-written, as well as removing 
- write_binary_to_storage. ftp.mlsd() returns file_name as well as necessary metadata for tracking file versions. 
- - Moved manifest functions to a manifest_helper_functions script to reduce clutter in a single file. 
- - Using queue.Queue() to create a thread-safe object where I 
-    place file_metadata that will be written to manifest.  
- 
- - What needs improving:
-    (All tests are run with grobid, not local machine)
-    - With current threadpool setup, when I use multiple threads, the FTP object disconnects,
-    closes current thread, then begins a new thread in a seperate first level folder. I have inspected CPU usage
-     using `htop` while running script with up to 10 threads and CPU utilization is never above 10%.
-    I do not get this issue when I use 1 thread, so current file can use 1 or many threads depending on what is commented
-    out in the main() function
-
-January 29th Feedback:
-    - Decouple the sqlite manifest, give every first level folder a sqlite table
-        - Get the metrics (RAM, number of files, time to complete, for every second level directory)
-    - Remove the consumer thread, instead, inside the process_folder, just check length of 
-    metadata list, and write it to manifest from there.   
-
-
-# Version 2
-1. get first level dir from FTP server
-2. for each dir (parrallel oppourtunity)
-    - get subdir structure (ftp connection)
-    - get file list 
-    
-
-
-
-
-"""
-
 import concurrent.futures
 from pathlib import Path
 from ftplib import FTP
-import argparse, ftplib, logging, gzip, tarfile, sqlite3
+import argparse, ftplib, logging, gzip, tarfile, sqlite3,time
 from datetime import datetime, timezone
 from typing import TypedDict, Dict, List
 import io
 import threading, time
 import queue
 # Helpder functions for interacting with manifest and keeping this script more readible 
-from manifest_helper_functions import create_or_connect_to_database, batch_upload_to_sql, get_manifest_data_from_first_level_dir 
+from sync_and_process_scripts.pubmed.version2.v2_manifest_helper_functions import create_or_connect_to_database, batch_upload_to_sql, get_manifest_data_from_first_level_dir 
 
 
-
-def get_current_time():
-    return datetime.now()
 
 class FileMetadataContent(TypedDict):
     # file_binary: io.BytesIO
@@ -58,6 +18,9 @@ class FileMetadataContent(TypedDict):
     article_last_update: datetime
     first_level_folder: str
     second_level_folder: str
+
+def get_current_time():
+    return datetime.now()
 
 def convert_ftp_file_modify_to_datetime(file_info):
 
@@ -93,7 +56,8 @@ def get_first_level_dir(ftp_server:str, starting_ftp_directory:str)-> list[str]:
     return files
 
 
-def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, q: queue.Queue, db_path):
+def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db_path):
+    return
     '''
     NOTE: 
     give every top level folder a sql table, to avoid overuse of memory and sharing information between threads. 
@@ -107,24 +71,26 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, q:
 
     
     sub_folders = ftp.nlst() 
+    
+    ftp.close()
     # Get existing data from the database
     # SQL Connection to check if files already exist in manifest
     db_conn = sqlite3.connect(db_path)
     # Check the return size of the sql_filtered_table to see 
     sql_filtered_tbl = get_manifest_data_from_first_level_dir(db_conn, first_level_folder=first_level_folder)
     
-    for name in sub_folders:
-        manifest_updates = get_second_level_directory_files(ftp_client=ftp, output_path=output_dir_path, first_level_folder=first_level_folder,
-                                        second_level_folder= name, sql_filtered_tbl=sql_filtered_tbl)
-        # Put list of dictionaries to be written as a single item in queue
-        # for writing to manifest
-        q.put(manifest_updates)
+    
+        
 
 
 
 
-def get_second_level_directory_files(ftp_client, output_path,first_level_folder, second_level_folder, sql_filtered_tbl):
+def get_second_level_directory_files(output_path,first_level_folder, second_level_folder, sql_filtered_tbl, ftp_host:str='test', pubmed_dir:str='test' ):
     try:
+        
+        ftp_client = ftplib.FTP(ftp_host)
+        ftp_client.login()
+        ftp_client.cwd(f"{pubmed_dir}/{first_level_folder}")
         logging.info(f"Entering dir: {output_path}/{first_level_folder}/{second_level_folder}")
         ftp_client.cwd(second_level_folder)
         
@@ -145,7 +111,7 @@ def get_second_level_directory_files(ftp_client, output_path,first_level_folder,
         return file_content_to_manifest
     except Exception as e:
         logging.error(f'Error {e}: in {first_level_folder}/{second_level_folder}')
-        ftp_client.voidcmd('NOOP') 
+        # ftp_client.voidcmd('NOOP') 
         # I've tried adding ftp re-connection here, but it would just start a new thread. Perhaps 
         # needs further debugging
 
@@ -220,17 +186,18 @@ def write_gzip_data_to_storage(
     local_path.parent.mkdir(parents=True, exist_ok=True)
    
     try:
+        #connect to an FTP server for every file being written
         ftp_gzip_download = ftplib.FTP(ftp_host)
         # Login anonymous user and password
         ftp_gzip_download.login()
         # cwd is change into /dir
         ftp_gzip_download.cwd(f'{starting_pubmed_dir}/{first_level_folder}/{second_level_folder}')
-        ftp_gzip_download.voidcmd('NOOP')
+        
         # writes binary to output path, overrides old binary 
         with open(local_path, 'wb') as f:
             # increased blocksize to try and improve speed
             ftp_gzip_download.retrbinary(f"RETR {file_name}", f.write)
-        ftp_gzip_download.close()
+        ftp_gzip_download.quit()
         return contents
     except Exception as e:
         # ftp_client.voidcmd("NOOP")
@@ -274,6 +241,50 @@ def consumer_thread(q, db_path):
 
 
 
+def compare_L2_ftp_files_with_manifest(sub_dir_record, output_path, file_content_to_manifest, sql_filtered_tbl ):
+    for obj in sub_dir_record:
+        first_level_folder = obj['first_level_dir']
+        second_level_folder = obj['second_level_dir']
+        file_list = obj['file_list']
+        
+        for gzip_file in file_list:
+                # file_info contais metadata we want
+                file_name, file_info = gzip_file
+                if file_info.get('type') == 'file' and file_name.endswith('.tar.gz'):
+                    # Change to ftp_article_last_modified
+                    article_last_modified = convert_ftp_file_modify_to_datetime(file_info)
+                    
+                    # If FTP file has been updated, write new binary to storage and update manifest
+                    if file_name in sql_filtered_tbl and article_last_modified > sql_filtered_tbl[file_name]['article_last_update']: 
+                        logging.info(f'file: {file_name} needs updating')
+                        file_contents = write_gzip_data_to_storage(
+                        file_name=file_name,
+                        # ftp_client=ftp_client,
+                        first_level_folder=first_level_folder,  # Hard-coded for demonstration
+                        second_level_folder=second_level_folder,
+                        output_dir=output_path,
+                        article_last_update= article_last_modified)
+                        
+                        
+                        file_content_to_manifest.append(file_contents)
+                        
+                    # else file name not in manifest, writ to storage as well since it is a new file not currently tracked
+                    elif file_name not in sql_filtered_tbl:
+                        file_contents = write_gzip_data_to_storage(
+                        file_name=file_name,
+                        # ftp_client=ftp_client,
+                        first_level_folder=first_level_folder,  # Hard-coded for demonstration
+                        second_level_folder=second_level_folder,
+                        output_dir=output_path,
+                        article_last_update= article_last_modified)
+                        
+                        
+                        file_content_to_manifest.append(file_contents)
+                    # else everything is up to date, continue
+        # return file information to update manifest    
+    return file_content_to_manifest
+
+
 
 def main() -> None:
     ftp_host = 'ftp.ncbi.nlm.nih.gov'
@@ -287,30 +298,52 @@ def main() -> None:
     create_or_connect_to_database(db_path)
     
     #Connect to ftp to get first_level_folders
-    top_level_folders = get_first_level_dir(ftp_server=ftp_host, starting_ftp_directory = starting_pubmed_dir)
-
-    # We will use this to write to SQL 
-    q = queue.Queue()
+    #top_level_folders = get_first_level_dir(ftp_server=ftp_host, starting_ftp_directory = starting_pubmed_dir)
+    ftp_client = ftplib.FTP(ftp_host)
+    # Login anonymous user and password
+    ftp_client.login()
+    # cwd is change into /dir
+    ftp_client.cwd(starting_pubmed_dir)
+    files = []
+    first_folders = ftp_client.nlst()
+    # ftp.quit()
+    # print(first_folders)
+    all_records = []
+    start = time.time()
     
-    # NOTE put the consumer function that writes to manifest within the process_folder function
-    consumer = threading.Thread(target=consumer_thread, args=(q, db_path), daemon=True)
-    consumer.start() 
-    # for first_level_folder in top_level_folders:
-    #     process_folder(ftp_host, starting_pubmed_dir, first_level_folder, output_folder,q, db_path)
-        
-    # There is something happening where the pipe breaks with multiple threads and begins 
-    # a new thread in a new first_level_folder
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = []
-        for first_level_folder in top_level_folders:
-            futures.append(
-                executor.submit(process_folder, ftp_host, starting_pubmed_dir, first_level_folder, output_folder,q, db_path)
-            )
-        # Wait for all folder downloads to finish
-        concurrent.futures.wait(futures)
-
-    q.join()
-    logger.info("All downloads and writes complete.")
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: 
+    for first_level_folder in first_folders[:16]:
+        #threadpool 
+        # navigate into sub folder
+        ftp_client.cwd(f"/pub/pmc/oa_package/{first_level_folder}")
+        # ftp_client.cwd(first_level_folder)
+        # print out files in subfolder with their metadata 
+        second_level_folders = ftp_client.nlst()
+        for second_level_folder in second_level_folders:
+            ftp_client.cwd(f"/pub/pmc/oa_package/{first_level_folder}/{second_level_folder}")
+            # ftp_client.cwd(second_level_folder)
+            a = list(ftp_client.mlsd())
+            # prints out a list of tuples
+            sub_dir_records = {
+                'first_level_dir': first_level_folder,
+                'second_level_dir': second_level_folder,
+                'file_list': a}
+            all_records.append(sub_dir_records)
+        # navigate out of sub_folder for next loop
+        # ftp_client.cwd('..')
+    
+    # print(all_records[0])
+    
+    #closing the FTP
+    ftp_client.close()
+    # get the sql filtered table
+    db_conn = sqlite3.connect(db_path)
+    sql_filtered_tbl = get_manifest_data_from_first_level_dir(db_conn, first_level_folder='00')    
+    
+    # check the values in output list of dict against manifest current state
+    compare_L2_ftp_files_with_manifest(sub_dir_record=all_records, output_path=output_folder, file_content_to_manifest=[], sql_filtered_tbl=sql_filtered_tbl )    
+    end = time.time()
+    print(f"Time elapsed : {end - start}, ({len(all_records)} L2 records)")
 
 if __name__ == '__main__':
     main()
