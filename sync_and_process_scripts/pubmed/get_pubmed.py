@@ -9,7 +9,10 @@ Steps Algorithm needs to complete before considered finished
 - [WIP] checking if the file existing in output directory and manifest needs to be updated
 - [X] Bulk Write to SQL
 - [X] Manifest Updates
-- [X] Date comparison on existing files, modify only if file does is not  
+- [X] Date comparison on existing files, modify only if file does is not
+        - Bug Found:
+          If file already exists, remove old file from directory before 
+          adding new .tar.gz file to directory  
 '''
 
 # imports here
@@ -20,8 +23,26 @@ import sqlite3
 from datetime import datetime
 import argparse #
 import concurrent.futures
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from io import BytesIO
+from typing import TypedDict
+
+
+class UpdateFiles(TypedDict):
+    '''
+    'files_to_be_written': files_to_be_written,
+            'outdated_files_with_directory':{'second_level_dir':second_level_dir_name,
+                                            'outdated_files': outdated_files_names
+            }
+            }
+    '''
+    files_to_be_written_to_storage : List[Dict]
+    outdated_files_with_directory : OutdatedFilesWithPath
+
+class OutdatedFilesWithPath(TypedDict):
+    second_level_directory: str
+    outdated_files: list
+    
 
 
 def connect_to_pubmed(ftp_server:str, starting_ftp_directory:str)->object:
@@ -94,25 +115,31 @@ def convert_ftp_file_modify_to_datetime(file_info)-> str:
 
 def traverse_second_level_directory(
     ftp_path, output_path, first_level_folder, sql_filtered_tbl, ftp, second_level_dir_name
-) -> list[str]:
+) -> UpdateFiles:
+    # UpdateFiles(files_to_be_written_to_storage=)
     """
     This function checks multiple things:
        1. Which files are in the database -> Pass over them
        2. Which files are NOT in the database -> Add them to files_to_be_written, and write to output dir
-       3. Which files are in database but have old data -> Add them to files_to_be_written, and write to output dir
+       3. Which files are in database but have old data -> 
+            3A.) Remove old files
+            3B.) Add them to files_to_be_written
+            3C.) Write to output dir
 
     Files will be written to database AND output directory after individual threads complete in batch,
     no writing will occur during this function.
     """
     # Enter into the second level directory
+    # 
     files_to_be_written: List[object] = []
+    outdated_files_names: List[str] = []
 
     path_to_second_level_folder = Path(f"{output_path}/{first_level_folder}/{second_level_dir_name}")
     path_to_second_level_folder.mkdir(parents=True, exist_ok=True)
 
     logging.info(f'Entered {first_level_folder}/{second_level_dir_name}')
 
-    # Retrieve the list of files in the directory
+    # Retrieve the list of files in the FTP directory
     try:
         ftp.cwd(f"{ftp_path}/{first_level_folder}/{second_level_dir_name}")
         file_list = list(ftp.mlsd())
@@ -129,7 +156,7 @@ def traverse_second_level_directory(
         retries = 0
         max_retries = 3
 
-        while retries < max_retries:
+        if retries < max_retries:
             try:
                 file_name, file_info = gzip_file
 
@@ -140,36 +167,27 @@ def traverse_second_level_directory(
 
                     # Ensure the connection is alive
                     ftp.voidcmd("NOOP")
-                    
+
                     # Logic for checking if last modified  > what is in the sql table is TRUE
                     if file_name in sql_filtered_tbl and article_last_modified > sql_filtered_tbl[file_name]['article_last_update']:
 
-                        gzip_meta = get_gzip_data_in_memory(
-                            path_to_second_level_folder,
-                            file_name,
-                            ftp,
-                            ftp_path,
-                            first_level_folder,
-                            second_level_dir_name,
-                            article_last_modified,
-                        )
+                        gzip_meta = get_gzip_data_in_memory( path_to_second_level_folder, file_name, ftp, ftp_path, 
+                                                            first_level_folder, second_level_dir_name, article_last_modified,
+                                                            )
+                        # Files to be removed
+                        outdated_files_names.append(file_name)
+                        
                         files_to_be_written.append(gzip_meta)
-                        #else: pass # the file is up to date, do nothing
-                    elif file_name not in sql_filtered_tbl: 
-                        gzip_meta = get_gzip_data_in_memory(
-                            path_to_second_level_folder,
-                            file_name,
-                            ftp,
-                            ftp_path,
-                            first_level_folder,
-                            second_level_dir_name,
-                            article_last_modified,
-                        )
-                        files_to_be_written.append(gzip_meta)  
-                    else: 
+                    # file_name NOT IN manifest, then write to storage
+                    elif file_name not in sql_filtered_tbl:
+                        gzip_meta = get_gzip_data_in_memory( path_to_second_level_folder, file_name, ftp, ftp_path,
+                                                            first_level_folder, second_level_dir_name, article_last_modified,
+                                                            )
+                        files_to_be_written.append(gzip_meta)
+                    else:
                         #file exists and is up to date
-                        continue          
-                
+                        continue
+
                 # Break out of the retry loop if successful
                 break
 
@@ -188,7 +206,15 @@ def traverse_second_level_directory(
 
     logging.info(f'Exiting {first_level_folder}/{second_level_dir_name}')
     ftp.cwd('..')
-    return files_to_be_written
+    # return files_to_be_written
+    folder_updates : UpdateFiles = {
+        'files_to_be_written_to_storage' : files_to_be_written,
+        'outdated_files_with_directory' : {
+            'second_level_dir' : second_level_dir_name,
+            'outdated_files':outdated_files_names
+        }
+    } 
+    return folder_updates 
 
 
 
@@ -208,11 +234,11 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
 
         # SQL Connection to check if files already exist in manifest
         db_conn = sqlite3.connect(db_path)
-        
+
 
         # Get existing data from the database
         sql_filtered_tbl = get_manifest_data_from_first_level_dir(db_conn, first_level_folder=first_level_folder)
-        
+
         # Get the list of second-level directories
         items = ftp.nlst()
 
@@ -223,6 +249,7 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
         for i in range(0, len(items), batch_size):
             batch_items = items[i:i+batch_size]
             queue = []
+            outdated_files = []
 
             for item in batch_items:
                 # Collect data from each second-level directory
@@ -230,10 +257,14 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
                     pubmed_dir, output_dir_path, first_level_folder,
                     sql_filtered_tbl, ftp=ftp, second_level_dir_name=item
                 )
-                queue.extend(second_dir_output_temp)
+                queue.extend(second_dir_output_temp['files_to_be_written'])
+                outdated_files.extend(second_dir_output_temp['outdated_files_with_directory'])
 
             # After collecting data from the batch, write to output and upload to SQL
+            remove_files(outdated_files_with_directory=outdated_files,first_level_folder=first_level_folder)
+            
             write_file_to_output_dir(queue)
+            
             batch_upload_to_sql(queue, db_path)
 
             # Clear the queue
@@ -246,6 +277,12 @@ def process_folder(ftp_host, pubmed_dir, first_level_folder, output_dir_path, db
         logging.error(f"Error processing folder {first_level_folder}: {e}")
         return False
 
+
+def remove_files(outdated_files:List[str], first_level_folder:str, second_level_folder:str):
+    """
+    Removing .tar.gz files that have been deemed outdated according to last_modified_date
+    """
+    pass
 
 
 
@@ -465,7 +502,7 @@ def main():
     ftp_host = 'ftp.ncbi.nlm.nih.gov'
     starting_pubmed_dir = r'/pub/pmc/oa_package'
 
-    output_folder = Path('/home/dimu6211/pl/pubmed-01102025')
+    output_folder = Path('/home/dimu6211/pl/oa_package')
     # /home/dimu6211/pl/pubmed-01102025
     db_path = output_folder / 'manifest.db'
     output_folder.mkdir(parents=True, exist_ok=True)

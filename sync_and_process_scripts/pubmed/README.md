@@ -18,10 +18,14 @@ oa_package/
     00/
         00/
         01/
+        ...
+        /ff
     01/
         00/
         01/
             PMC1214.tar.gz
+        ..
+        /ff
 
 Get first level directories
 For each first level directories

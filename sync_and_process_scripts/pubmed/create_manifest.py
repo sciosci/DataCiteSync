@@ -60,30 +60,16 @@ def insert_batch(cursor, batch):
     ''', insert_data)
     return len(insert_data)  # Return the number of records inserted
 
-def get_gzip_metadata(file_path: str) -> dict:
+def get_gzip_metadata(file_path:Path):
     contents = {
         'article_id': file_path.name,
         'article_last_update': get_current_time(),
-        'downloaded_at': get_current_time(),
         'first_level_dir': str(file_path.parent.parent.name),
         'second_level_dir': str(file_path.parent.name),
-        'image_count': 0,
-        'xml_count': 0,
-        'pdf_count': 0,
-        'other_files': 0
+        
     }
 
-    with tarfile.open(file_path, 'r:gz') as tar:
-        for member in tar.getmembers():
-            file_extension = member.name.split('.')[-1].lower() if '.' in member.name else ''
-            if file_extension == 'pdf':
-                contents['pdf_count'] += 1
-            elif file_extension == 'xml':
-                contents['xml_count'] += 1
-            elif file_extension in ['jpg', 'png', 'gif']:
-                contents['image_count'] += 1
-            else:
-                contents['other_files'] += 1
+    
     return contents
 
 def get_current_time():
