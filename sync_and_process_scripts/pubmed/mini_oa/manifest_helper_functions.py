@@ -13,9 +13,10 @@ NOTES:
 """
 
 import sqlite3, logging
+from datetime import datetime
 
 
-def create_database(db_path)-> None:
+def create_or_connect_to_database(db_path)-> None:
     '''
     Connect to the sqLite database (or create it if it doesn’t exist)
         Tables being created:
@@ -31,8 +32,7 @@ def create_database(db_path)-> None:
         article_id TEXT NOT NULL,
         article_last_update TEXT,
         first_level_dir TEXT,
-        second_level_dir TEXT,
-    )
+        second_level_dir TEXT)
     ''')
 
     cursor.execute('''
@@ -41,15 +41,44 @@ def create_database(db_path)-> None:
         run_duratio TEXT,
         downloaded_at TEXT,
         first_level_dir TEXT,
-        second_level_dir TEXT,
-        
-    )
+        second_level_dir TEXT)
     ''')
 
     # Commit changes
     conn.commit()
     conn.close()
 
+def get_manifest_data_from_first_level_dir(db_conn, first_level_folder):
+    try:
+        # Enable dictionary-like access for rows
+        db_conn.row_factory = sqlite3.Row
+        cursor = db_conn.cursor()
+
+        # Parameterized query to prevent SQL injection
+        query = "SELECT * FROM articles_metadata WHERE first_level_dir = ?"
+        cursor.execute(query, (first_level_folder,))
+        rows = cursor.fetchall()
+
+        # Return the results as a dictionary so the lookup is O(1)
+        result_dicts = {}
+        for row in rows:
+            article_id = row["article_id"]
+            # Convert article_last_update to a datetime object if you need to compare dates
+            try:
+                article_last_update = datetime.strptime(row["article_last_update"], "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                # Handle unexpected format or set a fallback
+                article_last_update = None
+
+            result_dicts[article_id] = {
+                "article_last_update": article_last_update
+            }
+
+        return result_dicts
+
+    except Exception as e:
+        logging.info(f'Error in get_manifest_data_from_first_level_dir: {e}')
+        return {}
 
 
 
@@ -86,8 +115,8 @@ def batch_upload_to_sql(pubmed_result_data, db_path):
             cursor.execute('''
             INSERT INTO articles_metadata (
                 article_id, article_last_update, 
-                first_level_dir, second_level_dir,
-            ) VALUES ( ?, ?, ?, ?)
+                first_level_dir, second_level_dir)
+                VALUES ( ?, ?, ?, ?)
             ''', (
                 article_id, article_last_update, 
                 first_level_dir, second_level_dir
