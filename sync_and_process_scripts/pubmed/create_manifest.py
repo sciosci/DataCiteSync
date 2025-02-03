@@ -7,15 +7,23 @@
 
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-import threading
+import threading, argparse
 import logging
 import sqlite3
-import tarfile
-import datetime
+from typing import TypedDict
+from datetime import datetime
 from queue import Queue
 import concurrent.futures
 
-def process_folder(folder_path:str)->list[object]:
+class FileMetadata(TypedDict):
+    article_id : str
+    article_last_update: datetime
+    first_level_dir: str
+    second_level_dir: str    
+    
+
+
+def process_folder(folder_path:Path)->list[object]:
     folder_first_level = Path(folder_path)
     thread_name = threading.current_thread().name
     logging.info(f'Thread {thread_name} processing folder: {folder_first_level}')
@@ -37,28 +45,27 @@ def process_folder(folder_path:str)->list[object]:
 
 
 def insert_batch(cursor, batch):
-    insert_data = []
-    print('Batch: ',batch)
+    count = 0
     for item in batch:
-        insert_data.append((
+        data_tuple = (
             item.get('article_id'),
             item.get('article_last_update'),
-            item.get('downloaded_at'),
             item.get('first_level_dir'),
             item.get('second_level_dir'),
-            item.get('image_count'),
-            item.get('xml_count'),
-            item.get('pdf_count'),
-            item.get('other_files')
-        ))
-    cursor.executemany('''
-        INSERT INTO articles_metadata (
-            article_id, article_last_update, downloaded_at,
-            first_level_dir, second_level_dir,
-            image_count, xml_count, pdf_count, other_files
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', insert_data)
-    return len(insert_data)  # Return the number of records inserted
+        )
+        try:
+            cursor.execute('''
+                INSERT INTO articles_metadata (
+                    article_id, article_last_update,
+                    first_level_dir, second_level_dir
+                ) VALUES (?, ?, ?, ?)
+            ''', data_tuple)
+            count += 1
+        except sqlite3.IntegrityError as e:
+            # This error typically happens when there's a UNIQUE constraint violation
+            # We just skip that row and optionally log the error
+            print(f"Skipping duplicate: {data_tuple} - {e}")
+    return count
 
 def get_gzip_metadata(file_path:Path):
     contents = {
@@ -66,15 +73,12 @@ def get_gzip_metadata(file_path:Path):
         'article_last_update': get_current_time(),
         'first_level_dir': str(file_path.parent.parent.name),
         'second_level_dir': str(file_path.parent.name),
-        
     }
-
-    
     return contents
 
 def get_current_time():
     """Returns the current time."""
-    return datetime.datetime.now().isoformat()
+    return datetime.now().isoformat()
 
 def create_database(db_path):
     conn = sqlite3.connect(db_path)
@@ -83,17 +87,10 @@ def create_database(db_path):
     # Create articles_metadata table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS articles_metadata (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        article_id TEXT NOT NULL,
+        article_id TEXT PRIMARY KEY,
         article_last_update TEXT,
-        downloaded_at TEXT,
         first_level_dir TEXT,
-        second_level_dir TEXT,
-        image_count INTEGER,
-        xml_count INTEGER,
-        pdf_count INTEGER,
-        other_files INTEGER
-    )
+        second_level_dir TEXT)
     ''')
 
     # Create pubmed_runtime_data table
@@ -103,8 +100,7 @@ def create_database(db_path):
         date_execution TEXT NOT NULL,
         run_duration TEXT,
         downloaded_at TEXT,
-        new_zip_files_added INTEGER
-    )
+        new_zip_files_added INTEGER)
     ''')
 
     # Commit changes and close the connection
@@ -112,10 +108,30 @@ def create_database(db_path):
     conn.close()
 
 def main():
-    base_directory = Path('/home/dimu6211/pl/oa_package')
+    parser = argparse.ArgumentParser(description="""
+    Full download of latest oa_subset from pubmed FTP server 
+""")
+    
+    parser.add_argument(
+        "--input_dir", help="Output base directory of downloaded files"
+    )
+    parser.add_argument(
+        "--ftp_host", help="FTP host endpoint" 
+    )
+    
+    parser.add_argument(
+        "--starting_pubmed_dir", help="Starting directory for openAccess subset"
+    )
+
+    arguments = parser.parse_args()
+    
+    
+    base_directory = Path(arguments.input_dir)
+    
+    
     output_folder = base_directory
     db_path = output_folder / 'manifest.db'
-    data_queue = Queue()
+    
     batch_size = 1000  # Adjust as needed
 
     # Create or connect to the SQLite database
@@ -129,7 +145,7 @@ def main():
     )
 
     # Record the start time
-    start_time = datetime.datetime.now()
+    start_time = datetime.now()
     total_records_inserted = 0
 
 
@@ -164,7 +180,7 @@ def main():
     conn.commit()
 
     # Calculate run duration
-    end_time = datetime.datetime.now()
+    end_time = datetime.now()
     run_duration = str(end_time - start_time)
 
     # Update pubmed_runtime_data table

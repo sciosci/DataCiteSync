@@ -159,7 +159,7 @@ To do's:
         FTP servers can see client as idle when reading files, if
         the files are large, disconnection from FTP server can occur. 
 
-======================================================================================
+---
 
 November 13th, 2024
     # High Level:
@@ -215,16 +215,16 @@ November 13th, 2024
 
 
 
-================================================================================================================================
+---
 # get_pubmed continuiation
 
 November 13th, 2024.
 
 To refresh:
 
+----
 
-
-
+January Notes
 
 
 

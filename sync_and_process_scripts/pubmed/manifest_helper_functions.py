@@ -15,6 +15,7 @@ NOTES:
 import sqlite3, logging
 from datetime import datetime
 
+from typing import List
 
 def create_or_connect_to_database(db_path)-> None:
     '''
@@ -29,7 +30,7 @@ def create_or_connect_to_database(db_path)-> None:
     # Create the table if non-existent
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS articles_metadata (
-        article_id TEXT NOT NULL,
+        article_id TEXT PRIMARY KEY,
         article_last_update TEXT,
         first_level_dir TEXT,
         second_level_dir TEXT)
@@ -63,18 +64,21 @@ def get_manifest_data_from_first_level_dir(db_conn, first_level_folder):
         result_dicts = {}
         for row in rows:
             article_id = row["article_id"]
-            # Convert article_last_update to a datetime object if you need to compare dates
+            
+            # Convert article_last_update to a datetime object
+            article_last_update_str = row["article_last_update"]
+            
             try:
-                article_last_update = datetime.strptime(row["article_last_update"], "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                # Handle unexpected format or set a fallback
+                article_last_update = datetime.strptime(article_last_update_str, "%Y-%m-%dT%H:%M:%S.%f")
+            except (ValueError, TypeError):
+                # Handle unexpected format or None values
                 article_last_update = None
 
             result_dicts[article_id] = {
-                "article_last_update": article_last_update
+                "article_last_update": article_last_update  # Now it's a datetime.datetime object
             }
 
-        return result_dicts
+        return result_dicts 
 
     except Exception as e:
         logging.info(f'Error in get_manifest_data_from_first_level_dir: {e}')
@@ -89,11 +93,12 @@ def update_runtime_table(pubmed_result_data, db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-def batch_upload_to_sql(pubmed_result_data, db_path):
+def batch_upload_to_sql(pubmed_result_data , db_path:str):
     """
     Efficiently batch upload data to the SQL table. If the article_id exists,
     override the old value with the new data; otherwise, insert the new data.
     """
+   
     if not pubmed_result_data:
         logging.info("No data to upload to SQL.")
         return
@@ -120,7 +125,7 @@ def batch_upload_to_sql(pubmed_result_data, db_path):
 
             # Use INSERT with ON CONFLICT clause
             cursor.execute('''
-            INSERT INTO articles_metadata (
+            INSERT OR REPLACE INTO articles_metadata (
                 article_id, article_last_update, 
                 first_level_dir, second_level_dir)
                 VALUES ( ?, ?, ?, ?)
