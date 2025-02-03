@@ -7,7 +7,7 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate intro-sos
 
 # Execute the Python script
-python create_remote_manifest.py --input_dir '/home/dimu6211/pl/oa_package'
+python create_remote_manifest.py --input_dir  <input_directory>
 
 # Deactivate the Conda environment
 conda deactivate
