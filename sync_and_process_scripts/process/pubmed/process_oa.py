@@ -16,6 +16,10 @@ Docling:
 [  ]  Track extracted values in manifest
   
 MinerU:
+[  ] Get MinerU to run, 
+[  ] Extract values from single pdf file,
+[  ] Extract values from multiple pdf files, structuring output so each pdf file is its own folder
+[  ]  Track extracted values in manifest
 
 '''
 
