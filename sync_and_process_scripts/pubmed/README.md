@@ -123,7 +123,7 @@ To do's:
     #    - Do we need credentials to access endpoint, (no, it is a public server)
 
      Do we need to track what files we have synced from pubmed.
-        - Yes, tracking helps us moniter the file status in terms of it being up to date 
+        - Yes, tracking helps us monitor the file status in terms of it being up to date 
 
     R3. What is the status of each file,
         - Do we need to update it, is it new, what is the FTP path from oa_package to reach the file.What needs to be changed if there is anything
@@ -154,10 +154,9 @@ To do's:
 
 ### Current Errors I am facing
 - update data files, R3 WIP
-    - EOFError on FTPLib, (Tentative Solution Found. )
+    [Resolved] EOFError on FTPLib, (Tentative Solution Found. )
     - Possible Cause from initial investigation: 
-        FTP servers can see client as idle when reading files, if
-        the files are large, disconnection from FTP server can occur. 
+        FTP client disconnects due to idle time,  
 
 ---
 
