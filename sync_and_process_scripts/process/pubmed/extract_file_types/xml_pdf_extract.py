@@ -4,6 +4,7 @@ Information for this file:
 We use MPI for increase throughput 
 
 '''
+
 from mpi4py import MPI
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -55,16 +56,17 @@ def handle_status(folder_manifest, article_tar: Path, output_dir: Path, ext: str
                     if len(members) != 1:
                         # If more than 1 or no members, we want to skip the file
                         return 
-                    file_data = tar.extractfile(members[0])
+                    ext_file = members.pop()
+                    file_data = tar.extractfile(ext_file)
                     # Making output_path, to include PMCid (without the .tar.gz)
-                    output_path = output_dir / article_tar.stem.stem  # Using .stem to remove the .tar.gz part
-                    output_path.mkdir(parents=True, exist_ok=True)
-
+                    output_path = output_dir / Path(ext_file.name)  # This would be ./xml/06/da/PMC3395936/IJPS-6-37.nxml
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    logger.info(f'Output_path: {output_path} # Ext File:{ext_file} # File data: {file_data}')
                     # Writing the file to disk, with the correct extension (pdf or nxml)
                     with open(output_path, "wb") as f:
                         f.write(file_data.read())
 
-                # Update the manifest
+                # Update the manifest, article needs update is now false
                 folder_manifest.loc[folder_manifest["article_id"] == article_tar.name, manifest_col] = False
             except Exception:
                 logger.error(f"Error in {log_label} for {article_tar}", exc_info=True)
@@ -80,8 +82,8 @@ def traverse_second_level_dir(first_level_folder:Path, output_dir:Path):
     try:
         for second_level_folder in first_level_folder.iterdir():
             
-            output_pdf_dir = output_dir / Path('pdf')  / first_level_folder.name / second_level_folder.name
-            output_xml_dir = output_dir / Path('xml') / first_level_folder.name / second_level_folder.name
+            output_pdf_dir = output_dir / Path('pdf_extracted_from_zip')  / first_level_folder.name / second_level_folder.name
+            output_xml_dir = output_dir / Path('xml_extracted_from_zip') / first_level_folder.name / second_level_folder.name
             # MPI reduces the number of layers in the path? This is a patch but I need to investigate further.
             folder_manifest = pd.read_parquet(second_level_folder / f"{first_level_folder.name}_{second_level_folder.name}_manifest.parquet")
             for article_folder_path in second_level_folder.iterdir():
@@ -135,6 +137,7 @@ def main():
 
     # 4) split by rank
     my_folders = [fld for i,fld in enumerate(all_folders) if i % size == rank]
+    configure_logging('logging_xml_pdf.log')
     process_folder(my_folders, output_dir)
       
 if __name__ == "__main__":
