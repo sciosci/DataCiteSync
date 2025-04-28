@@ -1,3 +1,9 @@
+'''
+Information for this file:   
+
+We use MPI for increase throughput 
+
+'''
 from mpi4py import MPI
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -19,9 +25,8 @@ def configure_logging(log_path: Path):
     )
 logger = logging.getLogger(__name__)
 
-
 def update_xml_status(manifest, tar_path, out_dir):
-    """ Avoiding Code Duplication """
+    """ since xml and pdf have similar logic, I am, using this to try and avoide code duplication """
     return handle_status(
         manifest, tar_path, out_dir,
         ext=".nxml",
@@ -41,45 +46,34 @@ def handle_status(folder_manifest, article_tar: Path, output_dir: Path, ext: str
     """Where the files are written to disk and the manifest is updated inplace"""
     tracker = folder_manifest.query("article_id == @article_tar.name")
     # If not in tracker, we want to create a new entry
-    if tracker.iloc[0][manifest_col] == False:
-        try:
-            # Open the tar file - this was missing
-            with tarfile.open(article_tar, "r:gz") as tar:
-                members = [m for m in tar.getmembers() if m.isfile() and m.name.lower().endswith(ext)]
-                if len(members) != 1:
-                    # If more than 1 or no members, 
-                    # we want to skip the file
-                    return 
-                file_data = tar.extractfile(members[0])
-                output_dir.mkdir(parents=True, exist_ok=True)
-                #Writng the file to disk, with the correct extension
-                with open(output_dir / article_tar.name.replace(".tar.gz", ext), "wb") as f:
-                    f.write(file_data.read())
-            # An inline update to the manifest, this can be a bit trickky
-            # since we are working with a dataframe, may need change it
-            folder_manifest.loc[folder_manifest["article_id"] == article_tar.name, manifest_col] = False  # or True, depending on your logic
-        except Exception:
-            logger.error(f"Error in {log_label} for {article_tar}", exc_info=True)
-            folder_manifest.loc[folder_manifest["article_id"] == article_tar.name, manifest_col] = False
-    else:
-        # If no updateds are needed, 
-        # we want to skip the file
-        return
-
-def process_folder(first_level_folder: Path, output_dir: Path):
-    """
-    Traverse 
-    """
-        # 5) ThreadPool: one thread per first‐level folder (up to 8)
-    with ThreadPoolExecutor(max_workers=16) as pool:
-        futures = { pool.submit(traverse_second_level_dir, fld, output_dir): fld
-                    for fld in first_level_folder.iterdir() if fld.is_dir() }
-        reports = []
-        for fut in as_completed(futures):
+    if not tracker.empty:  # Check if tracker is not empty
+        if tracker.iloc[0][manifest_col] == True:
             try:
-                reports.append(fut.result())
-            except Exception as e:
-                print(f"[Rank] Error on {futures[fut]}: {e}")
+                # Open the tar file - this was missing
+                with tarfile.open(article_tar, "r:gz") as tar:
+                    members = [m for m in tar.getmembers() if m.isfile() and m.name.lower().endswith(ext)]
+                    if len(members) != 1:
+                        # If more than 1 or no members, we want to skip the file
+                        return 
+                    file_data = tar.extractfile(members[0])
+                    # Making output_path, to include PMCid (without the .tar.gz)
+                    output_path = output_dir / article_tar.stem.stem  # Using .stem to remove the .tar.gz part
+                    output_path.mkdir(parents=True, exist_ok=True)
+
+                    # Writing the file to disk, with the correct extension (pdf or nxml)
+                    with open(output_path, "wb") as f:
+                        f.write(file_data.read())
+
+                # Update the manifest
+                folder_manifest.loc[folder_manifest["article_id"] == article_tar.name, manifest_col] = False
+            except Exception:
+                logger.error(f"Error in {log_label} for {article_tar}", exc_info=True)
+                folder_manifest.loc[folder_manifest["article_id"] == article_tar.name, manifest_col] = False
+        
+        else:
+            logger.warning(f"No match found for article_id: {article_tar.name}")
+            return  # Skip if no match found
+    
 
 def traverse_second_level_dir(first_level_folder:Path, output_dir:Path):
     """ """
@@ -88,18 +82,33 @@ def traverse_second_level_dir(first_level_folder:Path, output_dir:Path):
             
             output_pdf_dir = output_dir / Path('pdf')  / first_level_folder.name / second_level_folder.name
             output_xml_dir = output_dir / Path('xml') / first_level_folder.name / second_level_folder.name
+            # MPI reduces the number of layers in the path? This is a patch but I need to investigate further.
             folder_manifest = pd.read_parquet(second_level_folder / f"{first_level_folder.name}_{second_level_folder.name}_manifest.parquet")
             for article_folder_path in second_level_folder.iterdir():
                 # XML and PDF status updates
                 # Connect to parquet file, stored in second level folder, 00/00/00_00_manifest.parquet
-                
                 update_xml_status(folder_manifest, article_folder_path, output_xml_dir)
                 update_pdf_status(folder_manifest, article_folder_path, output_pdf_dir)
             # Saving the updated manifest
             # After processing all articles in a second-level folder
-            folder_manifest.to_parquet( second_level_folder / f"{first_level_folder.name}_{second_level_folder.name}_manifest.parquet", index=False) 
+            folder_manifest.to_parquet( second_level_folder / f"{first_level_folder.parent.name}_{first_level_folder.name}_manifest.parquet", index=False) 
     except Exception as e:
-        logger.error("Error in process_second_level_dir: %s", e)
+            logger.error("Error in process_second_level_dir: %s. First Level Folder: %s, Second Level Folder: %s", e, first_level_folder, second_level_folder)
+
+def process_folder(first_level_folders: list[Path], output_dir: Path):
+    """
+    Traverse 
+    """
+    #ThreadPool: one thread per first‐level folder
+    with ThreadPoolExecutor(max_workers=32) as pool:
+        futures = { pool.submit(traverse_second_level_dir, fld, output_dir): fld
+                    for fld in first_level_folders if fld.is_dir() }
+        reports = []
+        for fut in as_completed(futures):
+            try:
+                reports.append(fut.result())
+            except Exception as e:
+                print(f"[Rank] Error on {futures[fut]}: {e}")
 
 
 def main():
@@ -110,8 +119,8 @@ def main():
 
     # 2) args
     p = argparse.ArgumentParser()
-    p.add_argument("-i","--input-dir",  type=Path, required=True)
-    p.add_argument("-o","--output-dir", type=Path, required=True)
+    p.add_argument("-i","--input_dir",  type=Path, required=True)
+    p.add_argument("-o","--output_dir", type=Path, required=True)
     args = p.parse_args()
     input_dir  = args.input_dir
     output_dir = args.output_dir; output_dir.mkdir(parents=True, exist_ok=True)
@@ -126,9 +135,7 @@ def main():
 
     # 4) split by rank
     my_folders = [fld for i,fld in enumerate(all_folders) if i % size == rank]
-
-    for folder in my_folders:
-        process_folder(folder, output_dir)
+    process_folder(my_folders, output_dir)
       
 if __name__ == "__main__":
     main()
