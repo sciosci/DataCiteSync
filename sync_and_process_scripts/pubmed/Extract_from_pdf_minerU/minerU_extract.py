@@ -6,6 +6,16 @@ Strucuture of args from mineru_extract_template.sh
  2. output_path: Where we are writing the data to
  3. Log_files: SLURM has their own runtime  logger script
 
+RECOMMENDATION:
+    Submit this file (using shell) multiple times, seperating the input data by n instances of 
+    minerU_extract, so you can use more GPU as they become available, and 
+    not have to wait for slurm to open up multiple GPUs and nodes. That can take 
+    several days of waiting in the queue. The manifests are independent so 
+    no worries about corruption as long as you are seperating input data at top 
+    level folder. 
+    
+    I am keeping 1 file here as the template, so there isnt multiple copies within the 
+    same repository.
 '''
 import logging
 import time
