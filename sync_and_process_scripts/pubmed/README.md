@@ -1,16 +1,8 @@
 Pubmed is an FTP Server. 
-
 List of all zip files on pubmed FTP server
 https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_file_list.txt
-
-
-FTP Where all the files are stored
-
 https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/
-
 ``` python
-
-
 """
 Output file structure for pubmed
 
@@ -26,7 +18,7 @@ oa_package/
             PMC1214.tar.gz
         ..
         /ff
-
+```
 Get first level directories
 For each first level directories
     Get second level directories
@@ -64,167 +56,33 @@ for filename in files_within_second_level:
     process_file(first_level_entry, second_level_entry, manifest, filename)
 =================================================================================================
 
-Manifest Structure
-
-Columns in table 1
-- id
-- start time
-- end time
-- records updated (count)
-- records added (count)
-- path to details of sync (a string to a parquet file)
-
-Table 2 columns
-- article id
-- first level directory
-- second level directory
-- file created timestamp
-- file updated timestamp
-- image count
-- has nxml
-- has pdf
-"""
-```
-
-Creating an extract data file
-
-
-folder of interest: oa_package
-
-I want to create a script that once mounted to PL from grobid, we can get the data for pubmed
-
-How the pubmed + manifest directories currently look in my local branch
-
-output_dir / 
-   data / 
-   
-         00/
-           00/ 
-              (zip files)
-                  ...
-         01/ 
-         02/
- 
-  manifest.db
-                         
-
-To do's: 
- ### High Level
- Create a copy of pubmed data to PL
-    R1. identify the file structure on FTP server
-        (Systematic approach of downloading a very large amount of data) 
-        two digit hexidecimal name
-    R2. Re-create the nested two digit hexidecimal folder structure on our computer
-    
-    - Method of access:
-        - 
-
-    #- How do we access the FTP server
-    #    - Do we need credentials to access endpoint, (no, it is a public server)
-
-     Do we need to track what files we have synced from pubmed.
-        - Yes, tracking helps us moniter the file status in terms of it being up to date 
-
-    R3. What is the status of each file,
-        - Do we need to update it, is it new, what is the FTP path from oa_package to reach the file.What needs to be changed if there is anything
-
-    R4. Sync Attempts. 
-        - How long does the script run, how many files were updates, last time we synced the files
-        - last time we checked
-        - Needed to track our copy of pubmed against the live FTP server, 
-        - lets us know how trustworthy our copy is
-
-
-### What has been done:
-
-- identified pubmed ftp structure, R1, Done
-
-- get_pubmed.py
-    - This script creates copy of pubmed on its output_dir, 
-    - syncs from scratch if there is no ouput dir, R2, Done
-    - creates manifest to track synced files, R3
-        - articles_status: R3 Done
-        - run_log: R4
-    - updates manifest and data files if file is outdated, R4 WIP  
-        - update manifest R3 and R4, Pending
-        - update data files, R3 WIP
-
-- create_remote_manifest.py : 
-    - creates a manifest from already existing pubmed copy in dir, R3 WIP
-
-### Current Errors I am facing
-- update data files, R3 WIP
-    - EOFError on FTPLib, (Tentative Solution Found. )
-    - Possible Cause from initial investigation: 
-        FTP servers can see client as idle when reading files, if
-        the files are large, disconnection from FTP server can occur. 
-
 ---
+Final Notes
 
-November 13th, 2024
-    # High Level:
-    What are we trying to do:
-        1. Create a copy of pubmed data in peta library (see above, for more information on this)
-        2. Create a manifest to track the pubmed information already in PL
+# MinerU
+### If there are no GPUs available
+MinerU can be run with CPU only, there is a key inthe magic-pdf.json
+"device-type":"cuda" that needs to be switched to "cpu" before
+it will recognize runs as cpu only. If this is not switched then script will error out. 
+**Runtime**:
+MinerU with CPU only took an average of 350 seconds per file ON 
+SLURM while using 2 nodes MPI, 8 tasks per node and 128 GBs of CPU memory.
+Why I did not increase the number of nodes with MPI higher?
+Because % Utilization on CPU only was at most 10%,
+which never made sense to me because if I would decrease the # of processes,
+then time for minerU to process each PDF file would stay the same, while CPU
+utilization would still stay below 10%.
 
-# Focusing on High Level #2, what is the manifest, and what will it look like? 
-    ### : Creating PL manifest background
-    In PL, there already is a folder named oa_package, which contains a sample 
-    of the pubmed data. In the same two-digit nested hexidecimal structure.
-    I am tasked with expanding the data of oa_package from a sample of pubmed to a local
-    copy.
+### If there are GPUs available.
+Why do I request only 1 GPU and one node at a time with minerU?
+When I would use multiple GPUs, and multiple nodes, queue time would
+regularly exceed 24 hours, due to the low amount of GPU specific resources. 
+So my work around for this, is submitting multiple scripts, each requesting 1 GPU and 
+1 node. So there wait time will be less than a couple hours at most, and if there is low
+demand and multiple GPUs are available, we will still get the benefit of multiple GPU
+processes. 
 
-    So, what is a manifest? 
-    - A manifest, is a record, which the administrators can use to track our pubmed copy in PL.
-
-    # Note:
-        For our use case a sqLite database will work. 
-   
-
-### Requirements of creating a manifest from oa_package
-     Do we need to track what files we have downloaded from pubmed.
-        - Yes, tracking helps us moniter the file status in terms of it being up to date 
-
-     What is the status of each file,
-        - Do we need to update it,, what is the FTP path from oa_package to reach the zip file.What needs to be changed 
-
-     Sync Attempts. 
-        - How long does the script run, how many files were updates, last time we synced the files
-        - last time we checked
-        - Needed to track our copy of pubmed against the live FTP server, 
-        - lets us know how trustworthy our copy is
-
-    ** Output from script, the manifest **
-    Our manifest will consist of two sheets: 
-    1. articles_metadata:
-        '''metadata information about our zip files''' 
-            path to reach file
-            files contained such as pdfs, xml, gifs, images
-            when was the file last updated on pubmed
-            when did we download the file
-    2. runtime_data:
-        '''runtime information about getting data from pubmed'''
-            new files added
-            files updated
-            date executed
-            runtime start
-            runtime stop
-            errors caught in runtime
-
-
-
-
-
----
-# get_pubmed continuiation
-
-November 13th, 2024.
-
-To refresh:
-
-----
-
-January Notes
-
-
-
+### Is there any issues with file status tracking if there are multiple scripts running?
+I changed the manifest from being a single sqlite3 file, to being pandas dataframes stored as parquets within
+every second level directory. 
+Example: 01/02/01_02_manifest.parquet, will store the information for articles within 01/02 folder. 
