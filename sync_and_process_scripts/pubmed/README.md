@@ -212,18 +212,3 @@ November 13th, 2024
 
 
 
-
-
----
-# get_pubmed continuiation
-
-November 13th, 2024.
-
-To refresh:
-
-----
-
-January Notes
-
-
-
