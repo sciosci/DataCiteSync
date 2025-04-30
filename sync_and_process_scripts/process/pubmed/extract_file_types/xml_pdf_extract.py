@@ -1,7 +1,7 @@
 '''
 Information for this file:   
 
-We use MPI for increase throughput 
+We use MPI for increase throughput.
 
 '''
 
@@ -44,7 +44,17 @@ def update_pdf_status(manifest, tar_path, out_dir):
     )
 
 def handle_status(folder_manifest, article_tar: Path, output_dir: Path, ext: str, manifest_col: str, log_label: str):
-    """Where the files are written to disk and the manifest is updated inplace"""
+    """
+    Args:
+        folder_manifest: The manifest file for the folder
+        article_tar: The tar file containing the articles
+        output_dir: The directory where the extracted files will be saved
+        ext: The file extension to look for (e.g., .pdf or .nxml)
+        manifest_col: The column in the manifest that indicates if extraction is needed
+        log_label: A label for logging purposes (e.g., "XML" or "PDF")
+
+    Where the files are written to disk and the manifest is updated inplace
+    """
     tracker = folder_manifest.query("article_id == @article_tar.name")
     # If not in tracker, we want to create a new entry
     if not tracker.empty:  # Check if tracker is not empty
@@ -78,7 +88,10 @@ def handle_status(folder_manifest, article_tar: Path, output_dir: Path, ext: str
     
 
 def traverse_second_level_dir(first_level_folder:Path, output_dir:Path):
-    """ """
+    """
+    FTP Server where we are downloading files from has a nested structure:
+    We are using th
+    """
     try:
         for second_level_folder in first_level_folder.iterdir():
             
@@ -99,10 +112,11 @@ def traverse_second_level_dir(first_level_folder:Path, output_dir:Path):
 
 def process_folder(first_level_folders: list[Path], output_dir: Path):
     """
-    Traverse 
+    Threads for each first level folder are managed here
     """
     #ThreadPool: one thread per first‐level folder
-    with ThreadPoolExecutor(max_workers=32) as pool:
+    workers = <number_of_workers>  # Set this to the number of threads you want to use
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = { pool.submit(traverse_second_level_dir, fld, output_dir): fld
                     for fld in first_level_folders if fld.is_dir() }
         reports = []

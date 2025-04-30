@@ -4,12 +4,8 @@ SLURM accesible scripts
 Strucuture of args from mineru_extract_template.sh
  1. input_data: what subset of oa_package we are looking to extract
  2. output_path: Where we are writing the data to
- 3. Log_files: SLURM has their own runtime script but I want to capture any errors here for additional debug support
- 4. db_path: We want every subset % to have its own manifest file, minimizing possible concurrency errors
- To-Do's:
- - Change the script to use pandas dataframes instead of sqlite
- - Use mpi for python to communicate data between nodes
- - Stop out of space errors
+ 3. Log_files: SLURM has their own runtime  logger script
+
 '''
 import logging
 import time
