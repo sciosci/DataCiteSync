@@ -171,6 +171,15 @@ def run(input_folders: list[Path], output_path: Path):
                 logger.error("Error in processing folder: %s", e)
 
 
+def divide_by_quarters(input_list:list[Path], n=5):
+    lists = [[] for N in range(n)]
+    i = 0
+    for elem in input_list:
+        lists[i].append(elem)
+        i = (i + 1) % n
+    return lists
+    
+
 def main():
     '''
     This is the function we will use in the template.py as the entry point for
@@ -191,16 +200,14 @@ def main():
     # 3)my folders, broadcast
     all_folders = sorted(f for f in input_dir.iterdir()
                              if f.is_dir() and len(f.name)==2)
-   
-
     output_dir.mkdir(parents = True, exist_ok=True)
     
     # Configure logging from within main
     log_path = output_dir / "extraction_using_MinerU.log"
     configure_logging(log_path)
-    #Passing the sepeperated folders by rank, so we can use mypi and 
-    # distributive memory.
-    run(all_folders, output_dir)
+    
+    lists = divide_by_quarters(input_list=input_dir)
+    run(lists[0], output_dir)
 
 if __name__ == "__main__":
     main()
