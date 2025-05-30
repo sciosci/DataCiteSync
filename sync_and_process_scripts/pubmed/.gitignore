@@ -1,0 +1,15 @@
+output_dir/
+./output_dir/
+threading_practice.py
+output.log
+ftp_processing.log
+./mini_oa/output
+./mini_oa/__pycache__
+
+
+mini_oa/output
+mini_oa/__pycache__
+shared_thread.py
+
+version2/output
+version2/__pycache__
